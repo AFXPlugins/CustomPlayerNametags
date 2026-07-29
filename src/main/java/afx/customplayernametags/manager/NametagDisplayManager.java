@@ -1,7 +1,7 @@
-package dev.customplayernametags.manager;
+package afx.customplayernametags.manager;
 
-import dev.customplayernametags.CustomPlayerNametags;
-import dev.customplayernametags.config.ConfigManager;
+import afx.customplayernametags.CustomPlayerNametags;
+import afx.customplayernametags.config.ConfigManager;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;

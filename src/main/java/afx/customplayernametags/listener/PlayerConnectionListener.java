@@ -1,8 +1,8 @@
-package dev.customplayernametags.listener;
+package afx.customplayernametags.listener;
 
-import dev.customplayernametags.CustomPlayerNametags;
-import dev.customplayernametags.manager.NametagDisplayManager;
-import dev.customplayernametags.manager.NametagManager;
+import afx.customplayernametags.CustomPlayerNametags;
+import afx.customplayernametags.manager.NametagDisplayManager;
+import afx.customplayernametags.manager.NametagManager;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;

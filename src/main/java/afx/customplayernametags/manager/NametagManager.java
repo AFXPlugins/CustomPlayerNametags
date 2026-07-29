@@ -1,9 +1,9 @@
-package dev.customplayernametags.manager;
+package afx.customplayernametags.manager;
 
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerTeams;
-import dev.customplayernametags.CustomPlayerNametags;
-import dev.customplayernametags.config.ConfigManager;
+import afx.customplayernametags.CustomPlayerNametags;
+import afx.customplayernametags.config.ConfigManager;
 import me.clip.placeholderapi.PlaceholderAPI;
 import net.kyori.adventure.text.Component;
 import net.md_5.bungee.api.ChatColor;

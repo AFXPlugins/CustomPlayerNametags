@@ -1,6 +1,6 @@
-package dev.customplayernametags.config;
+package afx.customplayernametags.config;
 
-import dev.customplayernametags.CustomPlayerNametags;
+import afx.customplayernametags.CustomPlayerNametags;
 import org.bukkit.configuration.file.FileConfiguration;
 
 public final class ConfigManager {

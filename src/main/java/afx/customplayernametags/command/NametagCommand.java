@@ -1,8 +1,8 @@
-package dev.customplayernametags.command;
+package afx.customplayernametags.command;
 
-import dev.customplayernametags.CustomPlayerNametags;
-import dev.customplayernametags.config.ConfigManager;
-import dev.customplayernametags.manager.NametagManager;
+import afx.customplayernametags.CustomPlayerNametags;
+import afx.customplayernametags.config.ConfigManager;
+import afx.customplayernametags.manager.NametagManager;
 import net.md_5.bungee.api.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
