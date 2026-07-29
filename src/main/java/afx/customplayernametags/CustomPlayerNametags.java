@@ -1,11 +1,11 @@
 package afx.customplayernametags;
 
 import com.github.retrooper.packetevents.PacketEvents;
-import dev.customplayernametags.command.NametagCommand;
-import dev.customplayernametags.config.ConfigManager;
-import dev.customplayernametags.listener.PlayerConnectionListener;
-import dev.customplayernametags.manager.NametagDisplayManager;
-import dev.customplayernametags.manager.NametagManager;
+import afx.customplayernametags.command.NametagCommand;
+import afx.customplayernametags.config.ConfigManager;
+import afx.customplayernametags.listener.PlayerConnectionListener;
+import afx.customplayernametags.manager.NametagDisplayManager;
+import afx.customplayernametags.manager.NametagManager;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bukkit.plugin.java.JavaPlugin;
 
