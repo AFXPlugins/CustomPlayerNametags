@@ -53,7 +53,7 @@ public final class CustomPlayerNametags extends JavaPlugin {
         nametagManager.startRefreshTask();
         displayManager.start();
 
-        getLogger().info("CustomPlayerNametags enabled (display-entity nametags for all players, no name spoofing).");
+        getLogger().info("CustomPlayerNametags enabled.");
     }
 
     @Override
