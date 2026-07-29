@@ -1,8 +1,0 @@
-afx\customplayernametags\listener\PlayerConnectionListener.class
-afx\customplayernametags\manager\BedrockDetector.class
-afx\customplayernametags\manager\NametagManager.class
-afx\customplayernametags\CustomPlayerNametags.class
-afx\customplayernametags\manager\NametagDisplayManager.class
-afx\customplayernametags\config\ConfigManager.class
-afx\customplayernametags\manager\NametagManager$PlayerState.class
-afx\customplayernametags\command\NametagCommand.class
