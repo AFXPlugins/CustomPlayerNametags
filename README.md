@@ -7,7 +7,7 @@
 
 - Uses PacketEvents to display custom nametags while keeping player usernames and other systems untouched.
 
-- Java and bedrock compatibility
+- Java and bedrock compatibility.
 
 ## Requirements
 
