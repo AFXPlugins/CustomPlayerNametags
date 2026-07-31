@@ -35,7 +35,7 @@ nametag-height-offset: 2.1
 # =========================================================================
 
 
-# IMPORTANT! - Selecting Nametag Dismoiunt Mode
+# IMPORTANT! - Selecting Nametag Dismount Mode
 # ------------------------------------------------------------------------------
 # No world management plugin? Set nametag-dismount-mode to "NONE".
 
@@ -47,7 +47,7 @@ nametag-height-offset: 2.1
 
 # Using Skript? Implement this console command before cross-world teleport:
 # /nametags dismount <player> [ticks]
-# <ticks> is optional — if omitted, dismount-duration-ticks below is used.
+# dismount-duration-ticks is used if [ticks] isn't specified.
 # ------------------------------------------------------------------------------
 
 
