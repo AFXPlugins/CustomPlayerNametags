@@ -19,5 +19,5 @@ commands:
 
 permissions:
   nametag.admin:
-    description: Allows use of /nametags reload (or /customplayernametags reload) and other admin actions.
+    description: Allows use of /nametags commands.
     default: op
