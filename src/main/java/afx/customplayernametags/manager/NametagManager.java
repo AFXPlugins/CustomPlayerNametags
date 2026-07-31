@@ -4,6 +4,7 @@ import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerTeams;
 import afx.customplayernametags.CustomPlayerNametags;
 import afx.customplayernametags.config.ConfigManager;
+import afx.customplayernametags.config.PlayerFormatStore;
 import me.clip.placeholderapi.PlaceholderAPI;
 import net.kyori.adventure.text.Component;
 import net.md_5.bungee.api.ChatColor;
@@ -34,12 +35,21 @@ public final class NametagManager {
     private final ConfigManager config;
 
     private final Map<UUID, PlayerState> states = new ConcurrentHashMap<>();
+    /**
+     * Backs per-player {@code nametag-format} overrides set via
+     * {@code /nametags format set <player> "<format>"}. Persisted to
+     * {@code player-formats.yml} so overrides survive server restarts. A
+     * player with no entry here just uses the global {@code nametag-format}
+     * from config.yml, same as before this existed.
+     */
+    private final PlayerFormatStore formatStore;
     private BukkitTask refreshTask;
     private NametagDisplayManager displayManager;
 
-    public NametagManager(CustomPlayerNametags plugin, ConfigManager config) {
+    public NametagManager(CustomPlayerNametags plugin, ConfigManager config, PlayerFormatStore formatStore) {
         this.plugin = plugin;
         this.config = config;
+        this.formatStore = formatStore;
     }
 
     public void setDisplayManager(NametagDisplayManager displayManager) {
@@ -91,6 +101,11 @@ public final class NametagManager {
 
     public void forget(UUID uuid) {
         states.remove(uuid);
+        // Note: formatStore is intentionally NOT cleared here. forget()
+        // runs on player quit, and a per-player format set via
+        // /nametags format set is meant to persist across sessions (and
+        // now across restarts too), not get wiped out the moment the
+        // player logs off.
         if (displayManager != null) {
             displayManager.remove(uuid);
         }
@@ -108,7 +123,7 @@ public final class NametagManager {
         if (!force && previous != null && previous.fullText().equals(fullText)) {
             // Text unchanged — still ensure the display entity exists / follows.
             if (displayManager != null) {
-                displayManager.update(target, fullText);
+                displayManager.update(target, fullText, false);
             }
             return;
         }
@@ -128,7 +143,7 @@ public final class NametagManager {
         }
 
         if (displayManager != null) {
-            displayManager.update(target, fullText);
+            displayManager.update(target, fullText, force);
         }
     }
 
@@ -149,11 +164,7 @@ public final class NametagManager {
      * entity so colors work everywhere.
      */
     private String computeFullText(Player target) {
-        String parsed = parse(target, config.getNametagFormat());
-        if (parsed == null || parsed.isBlank()) {
-            return target.getName();
-        }
-        return parsed;
+        return getEffectiveParsedFormat(target);
     }
 
     private String parse(Player target, String raw) {
@@ -162,6 +173,59 @@ public final class NametagManager {
         }
         String result = PlaceholderAPI.setPlaceholders(target, raw);
         return ChatColor.translateAlternateColorCodes('&', result);
+    }
+
+    /**
+     * The raw, unparsed format string currently in effect for {@code target}:
+     * their per-player override from {@code /nametags format set} if one has
+     * been set, otherwise the global {@code nametag-format} from config.yml.
+     * Placeholders are left unresolved and {@code &} color codes untranslated
+     * — exactly as stored. Backs {@code /nametags format view unparsed}.
+     */
+    public String getEffectiveRawFormat(Player target) {
+        String override = formatStore.get(target.getUniqueId());
+        return override != null ? override : config.getNametagFormat();
+    }
+
+    /**
+     * Same as {@link #getEffectiveRawFormat(Player)} but resolved through
+     * PlaceholderAPI with {@code &} colors translated — i.e. exactly what's
+     * currently rendered above {@code target}'s head (falling back to their
+     * plain username if the resolved format is blank, same as the tag itself
+     * does). Backs {@code /nametags format view parsed}.
+     */
+    public String getEffectiveParsedFormat(Player target) {
+        String parsed = parse(target, getEffectiveRawFormat(target));
+        if (parsed == null || parsed.isBlank()) {
+            return target.getName();
+        }
+        return parsed;
+    }
+
+    /**
+     * Sets (or, if {@code format} is {@code null}, clears) a per-player
+     * {@code nametag-format} override for {@code uuid}, replacing the global
+     * format just for them, persists it to {@code player-formats.yml}, and
+     * immediately refreshes their tag if they're online. Backs
+     * {@code /nametags format set}.
+     */
+    public void setFormatOverride(UUID uuid, String format) {
+        formatStore.set(uuid, format);
+        Player target = Bukkit.getPlayer(uuid);
+        if (target != null && target.isOnline()) {
+            refresh(target, true);
+        }
+    }
+
+    /**
+     * Clears {@code uuid}'s per-player {@code nametag-format} override (if
+     * any) from both memory and {@code player-formats.yml}, reverting them
+     * to the global {@code nametag-format} from config.yml, and immediately
+     * refreshes their tag if they're online. Backs
+     * {@code /nametags format reset}.
+     */
+    public void resetFormatOverride(UUID uuid) {
+        setFormatOverride(uuid, null);
     }
 
     // ------------------------------------------------------------------

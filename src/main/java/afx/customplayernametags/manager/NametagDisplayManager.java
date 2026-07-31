@@ -11,15 +11,20 @@ import org.bukkit.FluidCollisionMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Display;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.TextDisplay;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.RayTraceResult;
+import org.bukkit.util.Transformation;
 import org.bukkit.util.Vector;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -31,30 +36,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>A {@code TextDisplay} is used instead of an {@code ArmorStand} for two
  * reasons:
  * <ul>
- *   <li><b>Rock-solid tracking on both platforms:</b> the tag is
- *       re-teleported to the player's exact current position every single
- *       tick (the same rate the server itself receives player movement).
- *       {@link Display#setTeleportDuration(int)} controls how many ticks
- *       the client eases each of those updates over instead of snapping
- *       straight to it, and the right value is different per platform:
- *       <ul>
- *         <li>Java clients render each per-tick update in lockstep with the
- *             server tick, so a duration of {@code 0} (hard snap) keeps the
- *             tag pinned exactly above the head with zero drift. Any
- *             nonzero duration here re-arms a new easing animation on top
- *             of the still-in-progress previous one every tick, which
- *             during fast/erratic movement (sprinting, direction changes,
- *             knockback, elytra) makes the tag perpetually lag behind and
- *             visibly drift/swim instead of tracking the player.</li>
- *         <li>Bedrock clients receive these updates through Geyser's
- *             translation layer, where per-tick packets don't land on as
- *             clean a cadence as native Java ticks, so a hard snap there
- *             instead reads as jittery. Geyser does respect this metadata
- *             value (it doesn't unconditionally smooth on its own), so
- *             keeping a short {@link #BEDROCK_TELEPORT_DURATION_TICKS}
- *             interpolation window is what keeps Bedrock's tag looking
- *             steady.</li>
- *       </ul></li>
  *   <li><b>No invisible-flag flash:</b> An invisible {@code ArmorStand} has
  *       a body model that is hidden via a separate "Invisible" metadata
  *       flag sent after the entity's spawn packet. When re-shown to a
@@ -63,63 +44,140 @@ import java.util.concurrent.ConcurrentHashMap;
  *       flashes visible for a frame. A {@code TextDisplay} has no body
  *       model at all (it only ever renders its text), so there is nothing
  *       to flash regardless of packet ordering.</li>
+ *   <li><b>Passenger-mountable:</b> Display entities support the normal
+ *       vehicle/passenger relationship, which is what makes tracking
+ *       actually solid (see below).</li>
  * </ul>
+ *
+ * <h2>Why the tag never drifts, bounces, or glides</h2>
+ * <p>Earlier versions of this class re-teleported the display to the
+ * player's position every tick. That can never be perfectly solid: a
+ * teleport is a network position sync capped at the server's 20 ticks/sec,
+ * so the client is always either snapping discretely between ticks (visible
+ * as bouncing on fast Y movement like jumping) or easing between two
+ * tick-old positions on its own separate interpolation curve, which doesn't
+ * necessarily match the curve the client is already using to ease the
+ * player's own body — so the tag visibly slides relative to the head it's
+ * supposed to be fixed to.
+ *
+ * <p>This is solved by not teleporting the tag at all. Instead, the display
+ * is added as a <b>passenger</b> of the owning player via
+ * {@link Entity#addPassenger(Entity)}. Passenger position is computed
+ * entirely client-side, every render frame, directly from the vehicle's own
+ * already-interpolated transform — the same mechanism vanilla uses for
+ * anything visibly "attached" to a moving entity (a player riding a boat,
+ * a mob riding another mob). There is no extra network round trip and
+ * nothing to fall out of sync: whatever curve the client is already
+ * rendering the player's body on, the tag rides along on that exact curve.
+ * This works identically for Java and Bedrock/Geyser clients, since it's a
+ * fundamental entity relationship, not a Java-specific rendering detail.
+ *
+ * <p>The vertical offset above the player is applied as a
+ * {@link Transformation} translation on the display (not a location
+ * change), which only needs to be touched when the player's crouch state
+ * actually changes — not every tick — since the horizontal/vertical
+ * following itself is now free.
+ *
+ * <h2>Two displays per player, not one</h2>
+ * <p>Every owner gets <b>two</b> passenger {@code TextDisplay} entities —
+ * {@code javaDisplay} and {@code bedrockDisplay} — carrying identical text
+ * but two independently-tuned {@link Transformation} translations. Each
+ * viewer is only ever shown the one entity matching their own client
+ * ({@link BedrockDetector#isBedrockPlayer}); the other is always hidden to
+ * them via {@code hideEntity}.
+ *
+ * <p>This exists because the Java/Bedrock rendering gap that
+ * {@link ConfigManager#getBedrockHeightAdjust()} corrects for is a property
+ * of <b>how the viewer's client</b> (vanilla Java vs. Geyser) renders a
+ * passenger-mounted display — it is not a property of which platform the
+ * <em>ridden player</em> happens to be on. A single {@code Transformation}
+ * is entity metadata broadcast identically to every viewer, so there is no
+ * way to key that correction off the viewer with only one entity: an
+ * earlier version of this code keyed it off the owner's platform instead
+ * (as a stand-in), which get all three cross-platform cases wrong at once —
+ * a Bedrock viewer watching a Java owner crouch got no correction at all
+ * (too low), while a Java viewer watching a Bedrock owner got a correction
+ * that was never meant for them (too low standing, too high crouching).
+ * Maintaining one real entity per viewer platform lets each viewer's
+ * {@link Transformation} be tuned purely for their own client, regardless
+ * of who they're looking at.
  *
  * Visibility (Paper API):
  * <ul>
  *   <li>{@code setVisibleByDefault(false)}</li>
- *   <li>{@code showEntity} for every online player except the owner
- *       (sneaking dims the tag rather than hiding it — see below)</li>
- *   <li>Owner never sees their own tag (cannot see own nametag when looking up)</li>
+ *   <li>{@code showEntity} for the one display matching each online
+ *       viewer's platform, {@code hideEntity} for the other, for every
+ *       viewer except the owner (sneaking dims the tag rather than hiding
+ *       it — see below)</li>
+ *   <li>Owner never sees either of their own tags (cannot see own nametag
+ *       when looking up)</li>
  * </ul>
  *
  * Standing vs. sneaking look:
  * <ul>
- *   <li><b>Standing:</b> full-brightness text, {@code setSeeThrough(true)}.
- *       Visible through walls (vanilla-style).</li>
+ *   <li><b>Standing:</b> full-brightness, fully-opaque text. Rendered solid
+ *       (normal depth-tested rendering, not see-through) so it's occluded
+ *       by walls/blocks like any other entity, matching vanilla.</li>
  *   <li><b>Sneaking:</b> text colors darkened (component rewrite), reduced
  *       opacity, and per-viewer line-of-sight checks so the tag stays visible
  *       in the open but is hidden when a wall blocks the view. Works for both
- *       Java and Bedrock viewers without respawning the entity (respawn caused
- *       a visible jump on Java).</li>
+ *       Java and Bedrock viewers without respawning the entity.</li>
  * </ul>
- * <p>Nametag height tracks eye height so the gap above the head stays constant
- * when crouching. On uncrouch, see-through is delayed one tick until the tag
- * is already at standing height, preventing a through-wall jump. That delayed
- * hide/respawn dance is applied <em>only</em> to Bedrock viewers who were
- * actually LOS-hidden during the sneak — respawning a viewer who already had
- * a clear view produces the same "spawns high, glides down" glitch it exists
- * to prevent, so already-visible viewers just get a plain in-place teleport.
+ * <p>Nametag height tracks eye height so the gap above the head stays
+ * constant when crouching. Because this is now a {@link Transformation}
+ * change on an already-attached passenger (not a position teleport), the
+ * crouch/uncrouch height change can never produce the "spawns high, glides
+ * down" glitch older teleport-based approaches had to work around — the
+ * passenger relationship itself is untouched, only the local offset eases.
  */
 public final class NametagDisplayManager {
 
-    /** How many ticks a position change should interpolate over on Bedrock (via Geyser). */
-    private static final int BEDROCK_TELEPORT_DURATION_TICKS = 3;
-
     /**
-     * Bedrock/Geyser renders TextDisplay slightly higher than Java at the same
-     * world Y — pull Bedrock tags down so both platforms match visually.
+     * Reference value used to cancel out the vehicle's default passenger
+     * attachment offset (see {@link #buildTransformation}). Deliberately
+     * <b>not</b> recomputed per-pose from a live bounding box: testing
+     * showed the client's actual default attach point does not shrink when
+     * the player crouches, so an offset that dynamically shrunk with the
+     * live bounding box (as an earlier version of this code did) double
+     * counted the crouch height change — the tag ended up too low while
+     * crouched and then overshot too high on uncrouch, since the
+     * correction and the real (unmoving) attach point were fighting each
+     * other. Using one fixed value for every pose and letting the
+     * translation below carry 100% of the pose-dependent height change
+     * fixes both directions at once. The exact number only needs to be in
+     * the right ballpark — it's a constant that's subtracted then
+     * (approximately) re-added by the real attach point, so any consistent
+     * value works; this is simply a typical standing player height.
      */
-    private static final double BEDROCK_HEIGHT_ADJUST = -0.10;
+    private static final double ASSUMED_MOUNT_OFFSET = 1.8;
 
     /**
      * Vanilla standing / sneaking eye heights. Fixed values (not live
      * {@code getEyeHeight()}) so stand↔crouch snaps to the final pose in one
-     * teleport instead of tracking intermediate eye heights over several ticks
-     * (which reads as a glide on Java).
+     * transformation change instead of tracking intermediate eye heights.
      */
     private static final double STANDING_EYE_HEIGHT = 1.62;
     private static final double SNEAK_EYE_HEIGHT = 1.27;
 
     /**
-     * How many ticks the nametag takes to rise from crouch height to standing
-     * height on uncrouch, for the Bedrock viewers who are seeing it for the
-     * first time in a while (was LOS-hidden behind a wall). Short and snappy,
-     * but gives the client real per-tick position updates to track instead of
-     * ever spawning the entity directly at its final height.
+     * How many ticks the crouch↔stand height change eases over for
+     * {@code javaDisplay}, via a native {@link
+     * Display#setInterpolationDuration(int)} transformation ease. Unrelated
+     * to position tracking (which the passenger relationship handles for
+     * free), so it only plays when the owner's sneak state actually flips,
+     * not on every movement tick.
+     *
+     * <p>{@code bedrockDisplay} does not use this at all — see
+     * {@link #snapBedrockHeight} for why Bedrock viewers get an instant
+     * height change instead of an eased one.
      */
-    private static final int UNCROUCH_RISE_TICKS = 4;
+    private static final int HEIGHT_TRANSITION_TICKS = 4;
 
+    /** Identity rotation, reused for every {@link Transformation} we build. */
+    private static final Quaternionf IDENTITY_ROTATION = new Quaternionf();
+
+    /** Uniform 1:1 scale, reused for every {@link Transformation} we build. */
+    private static final Vector3f UNIT_SCALE = new Vector3f(1f, 1f, 1f);
 
     /**
      * Fully opaque text. Use 255 (not the API's -1 sentinel) so Geyser/Bedrock
@@ -139,13 +197,58 @@ public final class NametagDisplayManager {
 
     private NametagManager nametagManager;
 
-    private final Map<UUID, TextDisplay> displays = new ConcurrentHashMap<>();
+    /** Per-owner pair of passenger displays: one tuned for Java viewers, one for Bedrock viewers. */
+    private final Map<UUID, DisplayPair> displays = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> lastSneaking = new ConcurrentHashMap<>();
-    /** In-flight uncrouch rise animations (see {@link #beginUncrouchRise}), keyed by owner. */
-    private final Map<UUID, BukkitTask> uncrouchRiseTasks = new ConcurrentHashMap<>();
+    /**
+     * Set by an explicit {@link #dismount(UUID, long)} call to the server tick
+     * at which {@link #tickMaintain()} should re-attach the passenger. Without this,
+     * {@code tickMaintain} re-mounts on the very next tick regardless of why
+     * the tag was dismounted. The dismount duration determines how many ticks
+     * to keep the player's nametag off. This is used for any command execution
+     * to ensure teleport commands or other operations complete without the
+     * passenger blocking them.
+     */
+    private final Map<UUID, Long> dismountUntilTick = new ConcurrentHashMap<>();
+    /**
+     * Current server tick, incremented every time {@link #tickMaintain()} runs.
+     * Used to determine when a dismount window expires.
+     */
+    private long currentTick = 0;
     /** Last full-brightness nametag text per player (used to rebuild a dimmed copy while sneaking). */
     private final Map<UUID, Component> brightTexts = new ConcurrentHashMap<>();
     private BukkitTask followTask;
+
+    /** The two viewer-platform-specific passenger displays owned by one player. */
+    private static final class DisplayPair {
+        final TextDisplay javaDisplay;
+        final TextDisplay bedrockDisplay;
+
+        /**
+         * Bedrock viewer UUIDs that currently have {@code bedrockDisplay}
+         * hidden from them via {@code hideEntity} (LOS-blocked while the
+         * owner sneaks). Tracked per-viewer — not just per-owner — because
+         * whether any one viewer can currently see the tag depends on that
+         * viewer's own line of sight, so different Bedrock viewers of the
+         * same owner can be hidden/shown independently at the same instant.
+         * Used solely to detect the hidden→shown transition (see
+         * {@link #showOneToViewer}).
+         */
+        final Set<UUID> bedrockHiddenFrom = ConcurrentHashMap.newKeySet();
+
+        DisplayPair(TextDisplay javaDisplay, TextDisplay bedrockDisplay) {
+            this.javaDisplay = javaDisplay;
+            this.bedrockDisplay = bedrockDisplay;
+        }
+
+        boolean isValid() {
+            return javaDisplay.isValid() && bedrockDisplay.isValid();
+        }
+
+        boolean isInWorld(World world) {
+            return javaDisplay.getWorld() == world && bedrockDisplay.getWorld() == world;
+        }
+    }
 
     public NametagDisplayManager(CustomPlayerNametags plugin, ConfigManager config) {
         this.plugin = plugin;
@@ -158,7 +261,11 @@ public final class NametagDisplayManager {
 
     public void start() {
         stopFollowTask();
-        this.followTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickFollow, 1L, 1L);
+        // No longer a position-tracking loop (the passenger relationship
+        // handles that for free) — this now only watches for the mount
+        // relationship being broken (world changes, other plugins/vehicles
+        // dismounting the tag) and keeps sneak-triggered visibility fresh.
+        this.followTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tickMaintain, 1L, 1L);
     }
 
     public void shutdown() {
@@ -169,10 +276,6 @@ public final class NametagDisplayManager {
         displays.clear();
         lastSneaking.clear();
         brightTexts.clear();
-        for (BukkitTask task : uncrouchRiseTasks.values()) {
-            task.cancel();
-        }
-        uncrouchRiseTasks.clear();
     }
 
     private void stopFollowTask() {
@@ -182,7 +285,20 @@ public final class NametagDisplayManager {
         }
     }
 
-    public void update(Player target, String fullLegacyText) {
+    /**
+     * @param forceAppearance when true, always runs the full
+     *                        {@link #applySneakState} pass (height,
+     *                        opacity, transformation, viewer visibility)
+     *                        even if the sneak state hasn't changed since
+     *                        the last call. Used by {@code /nametags
+     *                        reload} so height/appearance settings that
+     *                        just changed in config.yml take effect
+     *                        immediately, instead of waiting for the
+     *                        player's next crouch/uncrouch — the periodic
+     *                        per-second refresh passes {@code false} here
+     *                        since it only needs the cheap text-only path.
+     */
+    public void update(Player target, String fullLegacyText, boolean forceAppearance) {
         if (!target.isOnline()) {
             remove(target.getUniqueId());
             return;
@@ -192,99 +308,197 @@ public final class NametagDisplayManager {
                 fullLegacyText == null ? "" : fullLegacyText);
         brightTexts.put(target.getUniqueId(), nameComponent);
 
-        TextDisplay display = displays.get(target.getUniqueId());
-        if (display == null || !display.isValid() || display.getWorld() != target.getWorld()) {
-            if (display != null) {
+        DisplayPair pair = displays.get(target.getUniqueId());
+        if (pair == null || !pair.isValid() || !pair.isInWorld(target.getWorld())) {
+            if (pair != null) {
                 remove(target.getUniqueId());
             }
-            display = spawn(target, nameComponent);
-            if (display == null) {
+            pair = spawn(target, nameComponent);
+            if (pair == null) {
                 return;
             }
-            displays.put(target.getUniqueId(), display);
+            displays.put(target.getUniqueId(), pair);
         } else {
-            applyAppearance(display);
+            applyAppearance(pair);
+            ensureMounted(target, pair);
             boolean sneaking = target.isSneaking();
             Boolean previous = lastSneaking.put(target.getUniqueId(), sneaking);
-            if (previous == null || previous != sneaking) {
-                // Sneak flipped — must go through the full transition (respawn
-                // for Java see_through, LOS-aware Bedrock reveal, etc).
-                applySneakState(target, display, sneaking);
+            if (forceAppearance || previous == null || previous != sneaking) {
+                // Sneak flipped (or a forced refresh was requested) — must
+                // go through the full transition (text dim, opacity, height
+                // ease, LOS-aware Bedrock reveal, etc).
+                applySneakState(target, pair, sneaking);
             } else {
                 // Sneak state unchanged: only refresh the text/opacity. Do NOT
-                // call applySneakState() here — it re-runs the full hide/
-                // teleport/delayed-reveal dance every time, which this method
-                // is invoked from periodically (once a second, regardless of
-                // whether anything actually changed). Calling it unconditionally
-                // caused the tag to visibly hide and respawn every second for
-                // Bedrock viewers watching through a wall, even though nothing
-                // about the pose or visibility needed to change.
-                refreshTextOnly(target, display, sneaking);
+                // call applySneakState() here — it re-runs the full
+                // visibility dance every time, which this method is invoked
+                // from periodically (once a second, regardless of whether
+                // anything actually changed). Calling it unconditionally
+                // caused the tag to visibly hide and re-show every second for
+                // Bedrock viewers watching through a wall, even though
+                // nothing about the pose or visibility needed to change.
+                refreshTextOnly(target, pair, sneaking);
             }
         }
+    }
 
-        teleportAbove(target, display);
+    /**
+     * Dismount a player's nametag for the specified number of ticks. The tag
+     * will remain dismounted (passenger link removed) until the specified tick
+     * duration has elapsed. This is used when a player runs a command to prevent
+     * the nametag passenger from blocking teleportation or other command execution.
+     *
+     * <p>The nametag will automatically remount after the duration expires.
+     *
+     * @param uuid the player's UUID
+     * @param durationTicks how many ticks to keep the nametag dismounted
+     */
+    public void dismount(UUID uuid, long durationTicks) {
+        dismountUntilTick.put(uuid, currentTick + durationTicks);
+        DisplayPair pair = displays.get(uuid);
+        if (pair == null) {
+            return;
+        }
+        dismountOne(pair.javaDisplay);
+        dismountOne(pair.bedrockDisplay);
+    }
+
+    private void dismountOne(TextDisplay display) {
+        if (display == null || !display.isValid()) {
+            return;
+        }
+        Entity vehicle = display.getVehicle();
+        if (vehicle != null) {
+            vehicle.removePassenger(display);
+        }
     }
 
     public void remove(UUID uuid) {
-        TextDisplay display = displays.remove(uuid);
+        DisplayPair pair = displays.remove(uuid);
         lastSneaking.remove(uuid);
         brightTexts.remove(uuid);
-        BukkitTask riseTask = uncrouchRiseTasks.remove(uuid);
-        if (riseTask != null) {
-            riseTask.cancel();
+        dismountUntilTick.remove(uuid);
+        if (pair != null) {
+            removeOne(pair.javaDisplay);
+            removeOne(pair.bedrockDisplay);
         }
+    }
+
+    private void removeOne(TextDisplay display) {
         if (display != null && display.isValid()) {
+            // Explicitly break the passenger link first. Entity#remove()
+            // does not guarantee the vehicle's (the owning player's)
+            // passenger list is cleared in the same synchronous call —
+            // that stale reference is long enough for Bukkit's cross-world
+            // teleport handling to still see the player as carrying a
+            // passenger and block the teleport, even when this remove() is
+            // called from PlayerConnectionListener#onTeleport right before
+            // the actual move. Dismounting directly removes that race.
+            Entity vehicle = display.getVehicle();
+            if (vehicle != null) {
+                vehicle.removePassenger(display);
+            }
             display.remove();
         }
     }
 
     /** Shows every existing display to a viewer except their own (see class javadoc for sneak visibility rules). */
     public void showExistingTo(Player viewer) {
-        for (Map.Entry<UUID, TextDisplay> entry : displays.entrySet()) {
+        for (Map.Entry<UUID, DisplayPair> entry : displays.entrySet()) {
             if (entry.getKey().equals(viewer.getUniqueId())) {
                 continue;
             }
-            TextDisplay display = entry.getValue();
+            DisplayPair pair = entry.getValue();
             Player owner = Bukkit.getPlayer(entry.getKey());
-            if (display == null || !display.isValid() || owner == null) {
+            if (pair == null || !pair.isValid() || owner == null) {
                 continue;
             }
-            boolean sneaking = owner.isSneaking();
-            if (sneaking
-                    && BedrockDetector.isBedrockPlayer(viewer)
-                    && !hasLineOfSight(viewer, display.getLocation())) {
-                viewer.hideEntity(plugin, display);
-            } else {
-                viewer.showEntity(plugin, display);
-            }
+            showOneToViewer(owner, pair, viewer);
         }
     }
 
-    private TextDisplay spawn(Player owner, Component name) {
+    /**
+     * Shows the single display matching {@code viewer}'s own platform and
+     * hides the other, for one owner/viewer pair. Sneak-triggered
+     * line-of-sight occlusion only ever applies to the Bedrock display for a
+     * Bedrock viewer (see class javadoc — Java relies on {@code seeThrough}
+     * instead and is never hidden here).
+     */
+    private void showOneToViewer(Player owner, DisplayPair pair, Player viewer) {
+        boolean viewerIsBedrock = BedrockDetector.isBedrockPlayer(viewer);
+        boolean sneaking = owner.isSneaking();
+
+        if (viewerIsBedrock) {
+            UUID viewerId = viewer.getUniqueId();
+            boolean shouldHide = sneaking && !hasLineOfSight(viewer, effectiveLocation(owner));
+            if (shouldHide) {
+                viewer.hideEntity(plugin, pair.bedrockDisplay);
+                pair.bedrockHiddenFrom.add(viewerId);
+            } else {
+                if (pair.bedrockHiddenFrom.remove(viewerId)) {
+                    // This viewer's client just had the display destroyed
+                    // (re-tracking after being LOS-hidden), so make sure it
+                    // reappears already at the correct height rather than
+                    // whatever stale value was last set before it was hidden.
+                    pair.bedrockDisplay.setInterpolationDelay(0);
+                    pair.bedrockDisplay.setInterpolationDuration(0);
+                    pair.bedrockDisplay.setTransformation(buildTransformation(sneaking, true));
+                }
+                viewer.showEntity(plugin, pair.bedrockDisplay);
+            }
+            viewer.hideEntity(plugin, pair.javaDisplay);
+        } else {
+            viewer.showEntity(plugin, pair.javaDisplay);
+            viewer.hideEntity(plugin, pair.bedrockDisplay);
+        }
+    }
+
+    private DisplayPair spawn(Player owner, Component name) {
         brightTexts.put(owner.getUniqueId(), name);
         boolean sneaking = owner.isSneaking();
         lastSneaking.put(owner.getUniqueId(), sneaking);
-        TextDisplay display = createDisplay(owner, name, locationAbove(owner), sneaking);
-        if (display != null) {
-            applyViewerVisibility(owner, display, sneaking);
+
+        Location loc = owner.getLocation();
+        TextDisplay javaDisplay = createDisplay(owner, name, loc, sneaking, false);
+        TextDisplay bedrockDisplay = createDisplay(owner, name, loc, sneaking, true);
+        if (javaDisplay == null || bedrockDisplay == null) {
+            if (javaDisplay != null) {
+                javaDisplay.remove();
+            }
+            if (bedrockDisplay != null) {
+                bedrockDisplay.remove();
+            }
+            return null;
         }
-        return display;
+
+        owner.addPassenger(javaDisplay);
+        owner.addPassenger(bedrockDisplay);
+
+        DisplayPair pair = new DisplayPair(javaDisplay, bedrockDisplay);
+        applyViewerVisibility(owner, pair, sneaking);
+        return pair;
     }
 
     /**
      * Creates a TextDisplay with all nametag properties, including the
-     * current sneak see-through / opacity / dimmed text, applied inside the
-     * spawn consumer so they land on the initial metadata packet.
+     * current sneak see-through / opacity / dimmed text and height
+     * transformation, applied inside the spawn consumer so they land on the
+     * initial metadata packet.
+     *
+     * @param forBedrockViewer whether this specific entity is the one shown
+     *                          to Bedrock/Geyser viewers (as opposed to Java
+     *                          viewers) — controls which height correction
+     *                          applies (see {@link #buildTransformation}).
      */
-    private TextDisplay createDisplay(Player owner, Component bright, Location loc, boolean sneaking) {
+    private TextDisplay createDisplay(Player owner, Component bright, Location loc, boolean sneaking,
+                                       boolean forBedrockViewer) {
         World world = loc.getWorld();
         if (world == null) {
             return null;
         }
 
-        final boolean bedrock = isBedrockOwner(owner);
         final Component displayText = sneaking ? dim(bright) : bright;
+        final Transformation transformation = buildTransformation(sneaking, forBedrockViewer);
 
         return world.spawn(loc, TextDisplay.class, entity -> {
             entity.text(displayText);
@@ -297,45 +511,69 @@ public final class NametagDisplayManager {
             entity.setVisibleByDefault(false);
             entity.setShadowed(false);
             entity.setDefaultBackground(true);
-            entity.setTeleportDuration(bedrock ? BEDROCK_TELEPORT_DURATION_TICKS : 0);
+            // No easing on the very first frame — nothing to ease from yet.
+            entity.setInterpolationDelay(0);
+            entity.setInterpolationDuration(0);
+            entity.setTransformation(transformation);
             // Must be set here (pre-track) so Java clients receive see_through
             // on the spawn metadata packet. Later in-place changes are ignored.
-            entity.setSeeThrough(!sneaking);
+            entity.setSeeThrough(effectiveSeeThrough(sneaking));
             entity.setTextOpacity(sneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
         });
     }
 
     /**
-     * Updates only the displayed text/opacity for the current sneak state,
-     * without touching position or per-viewer visibility. Used for periodic
-     * refreshes (e.g. placeholder text changes) where the sneak state itself
-     * hasn't changed, so none of the hide/teleport/delayed-reveal machinery
-     * in {@link #applySneakState} needs to run again.
+     * Re-attaches both displays as passengers of {@code owner} if something
+     * (a world change, another plugin, the owner entering/leaving a
+     * vehicle, etc) broke the mount relationship. Cheap no-op in the
+     * overwhelmingly common case where they're already mounted correctly.
      */
-    private void refreshTextOnly(Player owner, TextDisplay display, boolean sneaking) {
-        Component bright = brightTexts.get(owner.getUniqueId());
-        if (bright == null) {
-            bright = display.text();
-            brightTexts.put(owner.getUniqueId(), bright);
+    private void ensureMounted(Player owner, DisplayPair pair) {
+        List<Entity> passengers = owner.getPassengers();
+        if (!passengers.contains(pair.javaDisplay)) {
+            owner.addPassenger(pair.javaDisplay);
         }
-        display.text(sneaking ? dim(bright) : bright);
-        display.setTextOpacity(sneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
+        if (!passengers.contains(pair.bedrockDisplay)) {
+            owner.addPassenger(pair.bedrockDisplay);
+        }
     }
 
     /**
-     * Applies standing-vs-sneaking appearance on the custom TextDisplay.
-     * Always keeps the configured format (never falls back to the raw username).
-     *
-     * <p>Crouch: grey text + reduced opacity + LOS occlusion for every viewer.
-     * Standing: full-colour text + full opacity + see-through.
-     *
-     * <p>Teleport is applied <em>before</em> showEntity so viewers who regain
-     * LOS (or uncrouch visibility) never see the tag pop in at a stale height.
+     * Updates only the displayed text/opacity for the current sneak state,
+     * without touching height or per-viewer visibility. Used for periodic
+     * refreshes (e.g. placeholder text changes) where the sneak state itself
+     * hasn't changed, so none of the visibility machinery in
+     * {@link #applySneakState} needs to run again.
      */
-    private void applySneakState(Player owner, TextDisplay display, boolean sneaking) {
+    private void refreshTextOnly(Player owner, DisplayPair pair, boolean sneaking) {
         Component bright = brightTexts.get(owner.getUniqueId());
         if (bright == null) {
-            bright = display.text();
+            bright = pair.javaDisplay.text();
+            brightTexts.put(owner.getUniqueId(), bright);
+        }
+        Component text = sneaking ? dim(bright) : bright;
+        byte opacity = sneaking ? OPACITY_SNEAKING : OPACITY_STANDING;
+        pair.javaDisplay.text(text);
+        pair.javaDisplay.setTextOpacity(opacity);
+        pair.bedrockDisplay.text(text);
+        pair.bedrockDisplay.setTextOpacity(opacity);
+    }
+
+    /**
+     * Applies standing-vs-sneaking appearance on both custom TextDisplays.
+     * Always keeps the configured format (never falls back to the raw username).
+     *
+     * <p>Crouch: grey text + reduced opacity + LOS occlusion for Bedrock viewers.
+     * Standing: full-colour text + full opacity + see-through.
+     *
+     * <p>The height change itself is a {@link Transformation} ease on the
+     * already-mounted passengers — never a position teleport — so there's
+     * nothing for it to glitch against.
+     */
+    private void applySneakState(Player owner, DisplayPair pair, boolean sneaking) {
+        Component bright = brightTexts.get(owner.getUniqueId());
+        if (bright == null) {
+            bright = pair.javaDisplay.text();
             brightTexts.put(owner.getUniqueId(), bright);
         }
 
@@ -344,158 +582,140 @@ public final class NametagDisplayManager {
             nametagManager.setVanillaNametagHidden(owner, true);
         }
 
-        display.text(sneaking ? dim(bright) : bright);
-        display.setTextOpacity(sneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
+        Component text = sneaking ? dim(bright) : bright;
+        byte opacity = sneaking ? OPACITY_SNEAKING : OPACITY_STANDING;
+
+        applySneakStateToOne(pair.javaDisplay, text, opacity, sneaking, false);
+        applySneakStateToOne(pair.bedrockDisplay, text, opacity, sneaking, true);
+
+        applyViewerVisibility(owner, pair, sneaking);
+    }
+
+    private void applySneakStateToOne(TextDisplay display, Component text, byte opacity,
+                                       boolean sneaking, boolean forBedrockViewer) {
+        display.setSeeThrough(effectiveSeeThrough(sneaking));
+
+        if (forBedrockViewer) {
+            display.text(text);
+            display.setTextOpacity(opacity);
+            snapBedrockHeight(display, buildTransformation(sneaking, true));
+            return;
+        }
 
         if (sneaking) {
-            BukkitTask riseTask = uncrouchRiseTasks.remove(owner.getUniqueId());
-            if (riseTask != null) {
-                riseTask.cancel();
-            }
-            display.setSeeThrough(false);
-            snapTeleportAbove(owner, display);
-            applyViewerVisibility(owner, display, true);
-        } else {
-            // Uncrouch.
-            //
-            // Only Bedrock viewers who were ACTUALLY LOS-hidden during the
-            // sneak (e.g. watching through a wall) need special handling.
-            // Bedrock viewers who already had a clear line of sight (the tag
-            // was never hidden from them) get a plain in-place teleport, same
-            // as Java viewers always do — no hide/respawn needed at all.
-            Location preUncrouchLoc = display.getLocation();
-            List<UUID> needsReveal = new ArrayList<>();
-            for (Player viewer : Bukkit.getOnlinePlayers()) {
-                if (viewer.getUniqueId().equals(owner.getUniqueId())) {
-                    continue;
-                }
-                if (BedrockDetector.isBedrockPlayer(viewer)
-                        && !hasLineOfSight(viewer, preUncrouchLoc)) {
-                    needsReveal.add(viewer.getUniqueId());
-                }
-            }
-
-            showToJavaViewers(owner, display);
-
-            if (needsReveal.isEmpty()) {
-                // Nobody was hidden — simple instant snap to standing height.
-                display.setSeeThrough(false);
-                snapTeleportAbove(owner, display);
-                display.setSeeThrough(true);
-                applyViewerVisibility(owner, display, false);
-                return;
-            }
-
-            // Some Bedrock viewers currently can't see the tag at all (wall
-            // blocked it while sneaking). Spawning the entity for them
-            // directly at the final standing height is what causes Geyser's
-            // spawn-then-overshoot glitch ("appears high, glides down"),
-            // regardless of how carefully the timing of that spawn is done.
-            //
-            // Instead: reveal it to them right where it already sits — the
-            // same crouch-height position it would already be at if it had
-            // been visible to them this whole time — then animate it rising
-            // to standing height over a few ticks, same as normal movement
-            // tracking. No hide/respawn ever happens once it's shown.
-            display.setSeeThrough(false);
-            beginUncrouchRise(owner, display, needsReveal);
-        }
-    }
-
-    /**
-     * Reveals the nametag to {@code newlyVisibleViewers} at its current
-     * (crouch-height) position, then eases it up to standing height over
-     * {@link #UNCROUCH_RISE_TICKS} ticks with a single client-interpolated
-     * teleport (rather than repeated per-tick hard snaps, which read as a
-     * choppy bobble instead of a smooth rise — the same reason normal
-     * Bedrock movement tracking elsewhere uses a short interpolation window
-     * instead of duration 0 every tick). Used only for the Bedrock viewers
-     * who were LOS-hidden while the owner was sneaking — see the uncrouch
-     * branch of {@link #applySneakState}.
-     */
-    private void beginUncrouchRise(Player owner, TextDisplay display, List<UUID> newlyVisibleViewers) {
-        final UUID ownerId = owner.getUniqueId();
-
-        BukkitTask existing = uncrouchRiseTasks.remove(ownerId);
-        if (existing != null) {
-            existing.cancel();
+            // Going into a crouch: text/opacity dim together with the
+            // height ease, as before — only the uncrouch case below needed
+            // to change.
+            display.text(text);
+            display.setTextOpacity(opacity);
+            display.setInterpolationDelay(0);
+            display.setInterpolationDuration(HEIGHT_TRANSITION_TICKS);
+            display.setTransformation(buildTransformation(true, false));
+            return;
         }
 
-        // Reveal at the current (crouch-height) position first — the spawn
-        // packet lands there, unchanged, so there's nothing to glitch.
-        for (UUID vid : newlyVisibleViewers) {
-            Player v = Bukkit.getPlayer(vid);
-            if (v != null) {
-                v.showEntity(plugin, display);
-            }
-        }
-
-        // One teleport to the final standing position, with a client-side
-        // interpolation window so Java and Bedrock both ease smoothly
-        // between the two heights instead of us hard-snapping every tick.
-        display.setInterpolationDuration(0);
+        // Uncrouching: Display entities generically interpolate whichever
+        // fields actually changed in a metadata update once
+        // interpolation_duration is >0 for that update — not just the
+        // transformation. Text/opacity were being bundled into the very
+        // same update as the height-ease transformation below, so a Java
+        // viewer saw the color lerp back to full brightness over
+        // HEIGHT_TRANSITION_TICKS right along with the height, instead of
+        // snapping back immediately.
+        //
+        // Fix: send the text/opacity change on its own first, with
+        // interpolation_duration forced to 0 so the client applies it
+        // instantly, then apply the height ease as a *separate* metadata
+        // update one tick later. By the time that second update goes out,
+        // text/opacity are already unchanged (nothing left to interpolate),
+        // so only the height actually eases.
         display.setInterpolationDelay(0);
-        display.setTeleportDuration(UNCROUCH_RISE_TICKS);
-        display.teleport(locationAboveAt(owner, 1.0));
+        display.setInterpolationDuration(0);
+        display.text(text);
+        display.setTextOpacity(opacity);
 
-        BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            uncrouchRiseTasks.remove(ownerId);
-            TextDisplay s = displays.get(ownerId);
-            Player p = Bukkit.getPlayer(ownerId);
-            if (s == null || !s.isValid() || p == null || !p.isOnline() || p.isSneaking()) {
-                // Aborted (re-crouched, disconnected, etc) — sneaking's own
-                // snap/LOS handling already takes over in that case.
-                return;
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (display.isValid()) {
+                display.setInterpolationDelay(0);
+                display.setInterpolationDuration(HEIGHT_TRANSITION_TICKS);
+                display.setTransformation(buildTransformation(false, false));
             }
-            // Rise finished: restore the normal per-platform teleport
-            // duration for regular movement tracking, and finalize the
-            // standing look.
-            s.setTeleportDuration(isBedrockOwner(p) ? BEDROCK_TELEPORT_DURATION_TICKS : 0);
-            s.setSeeThrough(true);
-            applyViewerVisibility(p, s, false);
-        }, UNCROUCH_RISE_TICKS);
-        uncrouchRiseTasks.put(ownerId, task);
-    }
-
-    private void showToJavaViewers(Player owner, TextDisplay display) {
-        for (Player viewer : Bukkit.getOnlinePlayers()) {
-            if (viewer.getUniqueId().equals(owner.getUniqueId())) {
-                viewer.hideEntity(plugin, display);
-            } else if (!BedrockDetector.isBedrockPlayer(viewer)) {
-                viewer.showEntity(plugin, display);
-            }
-        }
+        });
     }
 
     /**
-     * Per-viewer visibility for a nametag display.
+     * The nametag always renders solid (normal depth-tested rendering, not
+     * Minecraft's "see through" mode) — not configurable. This keeps the
+     * text properly hidden behind walls/blocks like any other entity
+     * (matching vanilla behavior) and avoids the client mis-sorting a
+     * see-through entity against other translucent geometry (water, glass,
+     * clouds, banners) behind it.
+     */
+    private boolean effectiveSeeThrough(boolean sneaking) {
+        return false;
+    }
+
+    /**
+     * Sets {@code display} (the Bedrock-viewer entity) straight to
+     * {@code target}'s height with no animation at all, unlike
+     * {@code javaDisplay} which eases via native {@code interpolation_duration}
+     * metadata in {@link #applySneakStateToOne}.
+     *
+     * <p>An earlier version of this tried to fake that same ease for Bedrock
+     * by manually stepping the translation once per tick over several ticks,
+     * to work around Geyser not reliably carrying native Display
+     * interpolation through intact. That made things worse, not better: a
+     * Bedrock client doesn't tween between those manual per-tick updates the
+     * way it would a single interpolated change, so each step rendered as
+     * its own separate, independent pop — four visible jumps in quick
+     * succession instead of one. A single flat update is the only version of
+     * this that actually looks clean on Bedrock: one instant, correct snap,
+     * with nothing in between to stutter on.
+     */
+    private void snapBedrockHeight(TextDisplay display, Transformation target) {
+        display.setInterpolationDelay(0);
+        display.setInterpolationDuration(0);
+        display.setTransformation(target);
+    }
+
+    /**
+     * Per-viewer visibility for a nametag's pair of displays.
      *
      * <ul>
-     *   <li>Owner never sees their own tag.</li>
-     *   <li>Java viewers: always shown. Occlusion while sneaking is handled
+     *   <li>Owner never sees either of their own tags.</li>
+     *   <li>Java viewers: always shown the {@code javaDisplay}, never the
+     *       {@code bedrockDisplay}. Occlusion while sneaking is handled
      *       purely by {@code seeThrough=false} on the TextDisplay — do
      *       <em>not</em> hideEntity, or the client re-spawns the entity on
      *       uncrouch and the tag jumps (especially when viewed through a
      *       wall).</li>
-     *   <li>Bedrock viewers: Geyser ignores {@code see_through}, so while the
-     *       owner is sneaking we LOS-hide the tag when blocked by blocks.</li>
+     *   <li>Bedrock viewers: always shown the {@code bedrockDisplay}, never
+     *       the {@code javaDisplay}. Geyser ignores {@code see_through}, so
+     *       while the owner is sneaking we LOS-hide the Bedrock display when
+     *       blocked by blocks.</li>
      * </ul>
      */
-    private void applyViewerVisibility(Player owner, TextDisplay display, boolean sneaking) {
-        Location tagLoc = display.getLocation();
+    private void applyViewerVisibility(Player owner, DisplayPair pair, boolean sneaking) {
         for (Player viewer : Bukkit.getOnlinePlayers()) {
             if (viewer.getUniqueId().equals(owner.getUniqueId())) {
-                viewer.hideEntity(plugin, display);
+                viewer.hideEntity(plugin, pair.javaDisplay);
+                viewer.hideEntity(plugin, pair.bedrockDisplay);
                 continue;
             }
-            if (sneaking
-                    && BedrockDetector.isBedrockPlayer(viewer)
-                    && !hasLineOfSight(viewer, tagLoc)) {
-                viewer.hideEntity(plugin, display);
-            } else {
-                viewer.showEntity(plugin, display);
-            }
+            showOneToViewer(owner, pair, viewer);
         }
+    }
+
+    /**
+     * Approximate world-space location of the tag, for line-of-sight checks
+     * only. Based purely on the owner's own server-side position/pose, which
+     * is accurate enough for a blocks-only raytrace — the client-side
+     * rendering precision the passenger relationship buys us doesn't matter
+     * for this server-side check.
+     */
+    private Location effectiveLocation(Player owner) {
+        double eye = SNEAK_EYE_HEIGHT + (owner.isSneaking() ? 0.0 : (STANDING_EYE_HEIGHT - SNEAK_EYE_HEIGHT));
+        return owner.getLocation().add(0.0, eye, 0.0);
     }
 
     /**
@@ -528,8 +748,13 @@ public final class NametagDisplayManager {
      * sneaking. Rewriting colors is what makes the dim visible on Java
      * clients (they ignore {@code text_opacity} updates on these Displays).
      */
-    /** Solid grey used for the crouch nametag on every platform. */
-    private static final TextColor SNEAK_GREY = TextColor.color(160, 160, 160);
+    /**
+     * Solid, near-white grey used for the crouch nametag on every platform.
+     * Kept light rather than a dark/mid grey so it stays readable — a
+     * darker grey was hard to make out, especially for Bedrock/Geyser
+     * viewers.
+     */
+    private static final TextColor SNEAK_GREY = TextColor.color(225, 225, 225);
 
     /**
      * Forces the whole component tree to {@link #SNEAK_GREY} so Java and
@@ -558,108 +783,110 @@ public final class NametagDisplayManager {
      * {@code /nametags reload} takes effect on existing tags within one
      * refresh interval instead of requiring a respawn/rejoin.
      */
-    private void applyAppearance(TextDisplay display) {
-        display.setShadowed(false);
-        display.setDefaultBackground(true);
+    private void applyAppearance(DisplayPair pair) {
+        pair.javaDisplay.setShadowed(false);
+        pair.javaDisplay.setDefaultBackground(true);
+        pair.bedrockDisplay.setShadowed(false);
+        pair.bedrockDisplay.setDefaultBackground(true);
     }
 
-    private void tickFollow() {
-        for (Map.Entry<UUID, TextDisplay> entry : displays.entrySet()) {
+    /**
+     * Watches the mount relationship and Bedrock LOS visibility. No longer a
+     * position-tracking loop — the passenger relationship handles that for
+     * free — so this is much cheaper than the old per-tick teleport loop.
+     */
+    private void tickMaintain() {
+        currentTick++;
+        for (Map.Entry<UUID, DisplayPair> entry : displays.entrySet()) {
             UUID uuid = entry.getKey();
-            TextDisplay display = entry.getValue();
+            DisplayPair pair = entry.getValue();
             Player player = Bukkit.getPlayer(uuid);
             if (player == null || !player.isOnline()) {
                 remove(uuid);
                 continue;
             }
-            if (display == null || !display.isValid()) {
+            if (pair == null || !pair.isValid()) {
                 displays.remove(uuid);
                 continue;
             }
-            if (display.getWorld() != player.getWorld()) {
+            if (!pair.isInWorld(player.getWorld())) {
+                // Passengers are dropped on a world change; let the next
+                // periodic update() respawn (and re-mount) the tag in the
+                // new world rather than trying to move it across worlds.
                 remove(uuid);
                 continue;
             }
 
+            Long dismountUntil = dismountUntilTick.get(uuid);
+            if (dismountUntil != null) {
+                if (currentTick < dismountUntil) {
+                    // Dismount window still active — leave the passenger
+                    // detached so commands/teleports aren't blocked.
+                    continue;
+                }
+                dismountUntilTick.remove(uuid);
+            }
+
+            ensureMounted(player, pair);
+
             boolean sneaking = player.isSneaking();
             Boolean previous = lastSneaking.put(uuid, sneaking);
             if (previous == null || previous != sneaking) {
-                applySneakState(player, display, sneaking);
+                applySneakState(player, pair, sneaking);
             } else if (sneaking) {
-                // Refresh Bedrock LOS only; Java keeps the entity tracked.
-                applyViewerVisibility(player, display, true);
+                // Refresh Bedrock LOS only; position itself needs no work.
+                applyViewerVisibility(player, pair, true);
             }
-
-            teleportAbove(player, display);
         }
-    }
-
-    private void teleportAbove(Player player, TextDisplay display) {
-        if (uncrouchRiseTasks.containsKey(player.getUniqueId())) {
-            // beginUncrouchRise() is driving position for this owner right
-            // now — don't fight it with an immediate snap to the final height.
-            return;
-        }
-        Location dest = locationAbove(player);
-        Location cur = display.getLocation();
-        if (cur.getWorld() == dest.getWorld() && cur.distanceSquared(dest) < 0.0001) {
-            return;
-        }
-        // Movement (walk/jump/fall): platform duration only.
-        // Pose snaps are handled exclusively by snapTeleportAbove (duration 0).
-        // Using duration 0 on large jump Y deltas made Bedrock tags jitter.
-        display.setTeleportDuration(
-                isBedrockOwner(player) ? BEDROCK_TELEPORT_DURATION_TICKS : 0);
-        display.teleport(dest);
-    }
-
-    private Location locationAbove(Player player) {
-        return locationAboveAt(player, player.isSneaking() ? 0.0 : 1.0);
     }
 
     /**
-     * Same as {@link #locationAbove}, but with the crouch↔stand eye-height
-     * blend explicit as {@code t} (0 = full crouch, 1 = full standing)
-     * instead of derived from {@code player.isSneaking()}. Used by
-     * {@link #beginUncrouchRise} to animate intermediate heights.
+     * Builds the local offset that, once the display is riding the player
+     * as a passenger, puts the tag at the configured height above the
+     * player's head for their current pose, from the perspective of one
+     * specific viewer platform.
+     *
+     * <p>{@code desiredFromFeet} is the only pose-dependent term here — it
+     * correctly shrinks for the sneaking pose so the gap above the eyes
+     * stays constant. {@link #ASSUMED_MOUNT_OFFSET} is deliberately a fixed
+     * constant regardless of pose (see its own doc) since the real vehicle
+     * attach point doesn't move with crouch; letting both terms vary with
+     * pose was what caused the crouch/uncrouch height to overshoot.
+     *
+     * <p>{@link ConfigManager#getSneakHeightAdjust()} corrects for the real
+     * attach point dropping slightly while sneaking (see
+     * {@link #ASSUMED_MOUNT_OFFSET}'s doc) — raise it in config.yml if the
+     * tag still rests too low while crouching, lower it if it overshoots
+     * high on uncrouch, and this applies identically for every viewer since
+     * it's a property of the passenger attachment itself, not of any one
+     * client's renderer.
+     *
+     * <p>{@code forBedrockViewer} instead corrects for how a
+     * <b>Bedrock/Geyser client</b> renders this passenger-mounted display
+     * compared to vanilla Java — a difference in the viewer's renderer, not
+     * in the owner being ridden. {@link ConfigManager#getBedrockHeightAdjust()}
+     * and {@link ConfigManager#getBedrockSneakHeightAdjust()} are therefore
+     * only ever added to the entity a Bedrock viewer is shown, regardless of
+     * which platform the owner themselves is on.
      */
-    private Location locationAboveAt(Player player, double t) {
-        // Constant gap above the head: config offset is "from feet standing",
-        // convert to gap-above-eyes, then apply the pose's (possibly blended) eye height.
+    private Transformation buildTransformation(boolean sneaking, boolean forBedrockViewer) {
         double aboveEyes = config.getNametagHeightOffset() - STANDING_EYE_HEIGHT;
-        double eye = SNEAK_EYE_HEIGHT + t * (STANDING_EYE_HEIGHT - SNEAK_EYE_HEIGHT);
-        double offset = eye + aboveEyes;
-        if (isBedrockOwner(player)) {
-            offset += BEDROCK_HEIGHT_ADJUST;
+        double eye = sneaking ? SNEAK_EYE_HEIGHT : STANDING_EYE_HEIGHT;
+        double desiredFromFeet = eye + aboveEyes;
+        double translationY = desiredFromFeet - ASSUMED_MOUNT_OFFSET;
+        if (sneaking) {
+            translationY += config.getSneakHeightAdjust();
         }
-        return player.getLocation().add(0.0, offset, 0.0);
-    }
-
-    /**
-     * Teleports the display with {@code teleportDuration 0} so the stand↔crouch
-     * height change snaps instantly (no client-side easing), then restores the
-     * platform-appropriate duration for normal movement tracking.
-     */
-    private void snapTeleportAbove(Player player, TextDisplay display) {
-        // Pose change only — hard snap on every client. Also clear Display
-        // transformation interpolation so Java cannot ease the move.
-        display.setTeleportDuration(0);
-        display.setInterpolationDuration(0);
-        display.setInterpolationDelay(0);
-        display.teleport(locationAbove(player));
-        // Restore Bedrock movement smoothing next tick (not mid-snap).
-        if (isBedrockOwner(player)) {
-            final UUID id = player.getUniqueId();
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                TextDisplay still = displays.get(id);
-                if (still != null && still.isValid()) {
-                    still.setTeleportDuration(BEDROCK_TELEPORT_DURATION_TICKS);
-                }
-            });
+        if (forBedrockViewer) {
+            translationY += config.getBedrockHeightAdjust();
+            if (sneaking) {
+                translationY += config.getBedrockSneakHeightAdjust();
+            }
         }
-    }
-
-    private boolean isBedrockOwner(Player player) {
-        return BedrockDetector.isBedrockPlayer(player);
+        return new Transformation(
+                new Vector3f(0f, (float) translationY, 0f),
+                IDENTITY_ROTATION,
+                UNIT_SCALE,
+                IDENTITY_ROTATION);
     }
 }

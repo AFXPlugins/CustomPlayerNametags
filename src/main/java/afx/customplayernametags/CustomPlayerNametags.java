@@ -3,6 +3,7 @@ package afx.customplayernametags;
 import com.github.retrooper.packetevents.PacketEvents;
 import afx.customplayernametags.command.NametagCommand;
 import afx.customplayernametags.config.ConfigManager;
+import afx.customplayernametags.config.PlayerFormatStore;
 import afx.customplayernametags.listener.PlayerConnectionListener;
 import afx.customplayernametags.manager.NametagDisplayManager;
 import afx.customplayernametags.manager.NametagManager;
@@ -14,6 +15,7 @@ public final class CustomPlayerNametags extends JavaPlugin {
     private static CustomPlayerNametags instance;
 
     private ConfigManager configManager;
+    private PlayerFormatStore playerFormatStore;
     private NametagManager nametagManager;
     private NametagDisplayManager displayManager;
 
@@ -35,13 +37,16 @@ public final class CustomPlayerNametags extends JavaPlugin {
         this.configManager = new ConfigManager(this);
         this.configManager.load();
 
-        this.nametagManager = new NametagManager(this, configManager);
+        this.playerFormatStore = new PlayerFormatStore(this);
+        this.playerFormatStore.load();
+
+        this.nametagManager = new NametagManager(this, configManager, playerFormatStore);
         this.displayManager = new NametagDisplayManager(this, configManager);
         this.nametagManager.setDisplayManager(displayManager);
         this.displayManager.setNametagManager(nametagManager);
 
         getServer().getPluginManager().registerEvents(
-                new PlayerConnectionListener(this, nametagManager), this);
+                new PlayerConnectionListener(this, configManager, nametagManager), this);
 
         var nametagCmd = getCommand("nametags");
         if (nametagCmd != null) {
@@ -73,6 +78,10 @@ public final class CustomPlayerNametags extends JavaPlugin {
 
     public ConfigManager getConfigManager() {
         return configManager;
+    }
+
+    public PlayerFormatStore getPlayerFormatStore() {
+        return playerFormatStore;
     }
 
     public NametagManager getNametagManager() {

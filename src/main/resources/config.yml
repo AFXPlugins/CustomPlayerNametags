@@ -1,16 +1,107 @@
+# ===========================
+# CustomPlayerNametags
+# ===========================
+
 # Reload command: /nametags reload
 
-# Text shown above each player's head. Supports PlaceholderAPI and '&' colors.
-# Default: %player_name% (player's username)
-# Example: "%luckperms_prefix%%essentials_nickname%" (Requires LuckPerms, EssentialsX, and their respective PlaceholderAPI expansions)
-#
 # PlaceholderAPI documentation:
 # https://wiki.placeholderapi.com/users/using-placeholders/
-nametag-format: "%player_name%"
+
+# Format used for player's nametags. Supports PlaceholderAPI and '&' colors.
+# Default: "%luckperms_prefix%%essentials_nickname%" (Requires LuckPerms, EssentialsX, and their respective PlaceholderAPI expansions)
+# Fallback if you don't have those plugins: "%player_name%" (player's username)
+nametag-format: "%luckperms_prefix%%essentials_nickname%"
 
 # Height (in blocks) the nametag floats above the player.
-# Default: 2.2
-nametag-height-offset: 2.2
+# Default: 2.1
+nametag-height-offset: 2.1
+
+
+
+
+# ===========================
+# NAMETAG DISMOUNTING
+# ===========================
+
+# =========================================================================
+# The nametag is attached to the player as an invisible "passenger" entity
+# that keeps it in a fixed position relative to the player.
+
+# However, commands that teleport the player to a different world/dimension
+# can fail if the "passenger" is still attached.
+
+# To prevent this, the plugin can temporarily dismount the passenger before
+# the teleport happens.
+# =========================================================================
+
+
+# IMPORTANT! - Selecting Nametag Dismoiunt Mode
+# ------------------------------------------------------------------------------
+# No world management plugin? Set nametag-dismount-mode to "NONE".
+
+# Using Multiverse Core? Set nametag-dismount-mode to "NONE" and in Multiverse
+# config, set passenger-mode to "dismount_passengers".
+
+# Using other world management plugin? Set nametag-dismount-mode to "MANUAL" and
+# add plugin's teleport commands to dismount-commands.
+
+# Using Skript? Implement this console command before cross-world teleport:
+# /nametags dismount <player> [ticks]
+# <ticks> is optional — if omitted, dismount-duration-ticks below is used.
+# ------------------------------------------------------------------------------
+
+
+# Nametag Dismount Modes:
+# ------------------------------------------------------------------------
+#   NONE   - Completely disables manual and automatic dismounting
+# ------------------------------------------------------------------------
+#   AUTO   - Automatically dismounts the nametag whenever the player runs
+#            any command.
+# ------------------------------------------------------------------------
+#   MANUAL - Only dismounts the nametag when a command listed in
+#            dismount-commands is run.
+# ------------------------------------------------------------------------
+nametag-dismount-mode: AUTO
+
+
+# How long the nametag stays dismounted.
+# Used for both AUTO and MANUAL modes. 
+# 20 ticks = 1 second.
+dismount-duration-ticks: 2
+
+# MANUAL mode only!
+# Commands that dismount the nametag.
+# Do not include the slash.
+dismount-commands:
+  - examplecommand1
+  - examplecommand2
+
+
+
+
+# ===========================
+# Nametag Height Tuning
+# ===========================
+
+# If the tag looks right already, leave these alone.
+
+# Extra height while sneaking, for all viewers.
+# Default: 0.25
+sneak-height-adjust: 0.26
+
+# Height correction for Bedrock/Geyser viewers only (standing + sneaking).
+# Negative = lower, positive = higher. Doesn't affect Java viewers.
+# Default: -0.10
+bedrock-height-adjust: -0.10
+
+# Extra height for Bedrock/Geyser viewers while sneaking, added on top of
+# bedrock-height-adjust above. Doesn't affect Java viewers.
+# Default: 0.25
+bedrock-sneak-height-adjust: 0.25
+
+
+
+
 
 # PLEASE DO NOT CHANGE THIS VALUE!
 plugin-version: 1
