@@ -12,7 +12,7 @@ softdepend: [PlaceholderAPI]
 commands:
   nametags:
     description: CustomPlayerNametags commands
-q    usage: /nametags reload | /nametags update | /nametags format view <unparsed|parsed> <player> | /nametags format set <player> "<format>" | /nametags format reset <player>
+    usage: /nametags reload | /nametags update | /nametags format view <unparsed|parsed> <player> | /nametags format set <player> "<format>" | /nametags format reset <player>
     aliases: [customplayernametags]
     permission: customplayernametags.admin
     permission-message: You do not have permission to use this command.
