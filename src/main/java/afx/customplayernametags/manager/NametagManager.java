@@ -58,7 +58,7 @@ public final class NametagManager {
         this.plugin = plugin;
         this.config = config;
         this.formatStore = formatStore;
-        this.placeholderApiAvailable = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")
+        this.placeholderApiAvailable = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
 
         if (placeholderApiAvailable) {
             plugin.getLogger().info("PlaceholderAPI hooked successfully.");
@@ -211,6 +211,13 @@ public final class NametagManager {
      * does). Backs {@code /nametags format view parsed}.
      */
     public String getEffectiveParsedFormat(Player target) {
+        if (!placeholderApiAvailable) {
+            // Without PlaceholderAPI, nametag-format (global or per-player)
+            // can't be meaningfully resolved — any %placeholders% in it
+            // would just show up as literal text. Skip it entirely and
+            // fall back to the player's plain username instead.
+            return target.getName();
+        }
         String parsed = parse(target, getEffectiveRawFormat(target));
         if (parsed == null || parsed.isBlank()) {
             return target.getName();
