@@ -120,19 +120,16 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             return handleFormatCommand(sender, label, args);
         }
 
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                "&cUsage: /" + label + " reload"));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                "&cUsage: /" + label + " update"));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                "&cUsage: /" + label + " format view <unparsed|parsed> <player>"));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                "&cUsage: /" + label + " format set <player> \"<format>\""));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                "&cUsage: /" + label + " format reset <player>"));
+        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&eUsages:));
+        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " reload &e- Reload the plugin."));
+        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " update &e- Check plugin for updates."));
+        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format view <unparsed|parsed> <player> &e- View a player's nametag format."));
+        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format set <player> \"<format>\" &e- Set a player's nametag format."));
+        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format reset <player> &e- Reset a player's nametag format."));
+
         if (sender instanceof ConsoleCommandSender) {
             sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    "&cUsage: /" + label + " dismount <player> [ticks]"));
+                    "&f/" + label + " dismount <player> [ticks] &e- Dismount the player's nametag."));
         }
         return true;
     }
