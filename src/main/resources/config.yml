@@ -1,0 +1,100 @@
+#  _____         __             ___  __                  _  __               __              
+# / ___/_ _____ / /____  __ _  / _ \/ /__ ___ _____ ____/ |/ /__ ___ _  ___ / /____ ____ ____
+#/ /__/ // (_-</ __/ _ \/  ' \/ ___/ / _ `/ // / -_) __/    / _ `/  ' \/ -_) __/ _ `/ _ `(_-<
+#\___/\_,_/___/\__/\___/_/_/_/_/  /_/\_,_/\_, /\__/_/ /_/|_/\_,_/_/_/_/\__/\__/\_,_/\_, /___/
+#                                        /___/                                     /___/     
+
+
+# =================================
+# Reload command: /nametags reload
+# =================================
+
+
+# ========================================================================
+#                              Nametag Format
+# ========================================================================
+# PlaceholderAPI documentation:
+# https://wiki.placeholderapi.com/users/using-placeholders/
+#
+# Global format used for player nametags. Use PlaceholderAPI placeholders
+# to set global format for all players.
+# Use "/nametags format" to override the global format and set custom
+# formats for individual players.
+
+# Example: "%luckperms_prefix%%essentials_nickname%"
+nametag-format: "%player_name%"
+# ========================================================================
+
+
+# ==============================================================================
+#                             NAMETAG DISMOUNTING
+# ==============================================================================
+# The nametag is attached to the player using an invisible passenger entity,
+# keeping it in a fixed position above the player.
+
+# Some commands that teleport players to different worlds/dimensions
+# can fail if the "passenger" is still attached.
+
+# To prevent this, the plugin can temporarily dismount the passenger before
+# the teleport happens.
+
+
+# -------------------------------------------------------------------------------
+#                       Selecting Nametag Dismount Mode
+# -------------------------------------------------------------------------------
+# No world management plugin? Set nametag-dismount-mode to "NONE".
+#
+# Using Multiverse-Core? Set nametag-dismount-mode to "NONE", then set
+# passenger-mode to "dismount_passengers" in the Multiverse-Core config.
+#
+# Using other world management plugin? Set nametag-dismount-mode to "MANUAL" and
+# add plugin's teleport commands to dismount-commands.
+#
+# Using Skript? Implement this console command followed by a 1 tick delay before 
+# cross-world teleport --> /nametags dismount <player> [ticks]
+# dismount-duration-ticks is used if [ticks] isn't specified.
+# -------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------
+#                         Nametag Dismount Modes:
+# ------------------------------------------------------------------------
+#   NONE   - Disables nametag dismounting.
+# ------------------------------------------------------------------------
+#   AUTO   - Automatically dismounts the nametag whenever the player runs
+#            a command.
+# ------------------------------------------------------------------------
+#   MANUAL - Only dismounts the nametag when a command listed in
+#            dismount-commands is run.
+# ------------------------------------------------------------------------
+nametag-dismount-mode: AUTO
+
+# MANUAL mode only!
+# Commands that dismount the nametag.
+# Do not include the slash.
+dismount-commands:
+  - examplecommand1
+  - examplecommand2
+
+# How long the nametag stays dismounted.
+# Nametags automatically remount on world change.
+# 20 ticks = 1 second.
+dismount-duration-ticks: 2
+# ==============================================================================
+
+
+
+
+# =========================================================================
+#                               Other Options
+# =========================================================================
+# Maximum distance (in blocks) where nametags are shown.
+# Default: 64 (Vanilla value)
+nametag-render-distance: 64
+# =========================================================================
+
+
+
+
+# PLEASE DO NOT CHANGE THIS VALUE!
+plugin-version: 1
