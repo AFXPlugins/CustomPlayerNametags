@@ -46,10 +46,25 @@ public final class NametagManager {
     private BukkitTask refreshTask;
     private NametagDisplayManager displayManager;
 
+    /**
+     * Whether the PlaceholderAPI plugin is present and enabled. PlaceholderAPI
+     * is a soft dependency — if it's missing, placeholders in
+     * {@code nametag-format} are left unresolved (only {@code &} color codes
+     * are applied) instead of throwing {@link NoClassDefFoundError}.
+     */
+    private final boolean placeholderApiAvailable;
+
     public NametagManager(CustomPlayerNametags plugin, ConfigManager config, PlayerFormatStore formatStore) {
         this.plugin = plugin;
         this.config = config;
         this.formatStore = formatStore;
+        this.placeholderApiAvailable = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
+        if (!placeholderApiAvailable) {
+            plugin.getLogger().warning(
+                    "PlaceholderAPI not found — nametag-format placeholders (e.g. %player_name%) "
+                            + "will NOT be resolved. Only literal text and '&' color codes will show. "
+                            + "Install PlaceholderAPI to enable placeholder support.");
+        }
     }
 
     public void setDisplayManager(NametagDisplayManager displayManager) {
@@ -171,7 +186,7 @@ public final class NametagManager {
         if (raw == null || raw.isEmpty()) {
             return "";
         }
-        String result = PlaceholderAPI.setPlaceholders(target, raw);
+        String result = placeholderApiAvailable ? PlaceholderAPI.setPlaceholders(target, raw) : raw;
         return ChatColor.translateAlternateColorCodes('&', result);
     }
 

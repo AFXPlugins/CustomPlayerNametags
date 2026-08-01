@@ -6,8 +6,8 @@ author: AFXPlugins
 description: >
   Fully customizable player nametags.
 
-depend: [packetevents, PlaceholderAPI]
-softdepend: [LuckPerms, Essentials]
+depend: [packetevents]
+softdepend: [PlaceholderAPI]
 
 commands:
   nametags:
