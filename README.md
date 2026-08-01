@@ -21,8 +21,8 @@ nametag-height-offset: 2.1
 
 ## Commands
 
-- `/nametags reload` — Reloads the plugin configuration. Requires `nametag.admin` (default: OP).
+- `/nametags reload` — Reloads the plugin configuration. Requires `customplayernametags.admin`.
 
 ## Permissions
 
-- `nametag.admin` — Allows reloading the plugin configuration.
+- `customplayernametags.admin` — Allows reloading the plugin configuration (default: OP). 
