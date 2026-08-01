@@ -584,7 +584,7 @@ public final class NametagDisplayManager {
      *                          applies (see {@link #buildTransformation}).
      */
     private TextDisplay createDisplay(Player owner, Component bright, Location loc, boolean sneaking,
-                                      boolean forBedrockViewer) {
+                                       boolean forBedrockViewer) {
         World world = loc.getWorld();
         if (world == null) {
             return null;
@@ -706,7 +706,7 @@ public final class NametagDisplayManager {
     }
 
     private void applySneakStateToOne(TextDisplay display, Component text, byte opacity,
-                                      boolean sneaking, boolean forBedrockViewer, boolean occluded) {
+                                       boolean sneaking, boolean forBedrockViewer, boolean occluded) {
         display.setSeeThrough(effectiveSeeThrough(sneaking, occluded));
 
         if (forBedrockViewer) {

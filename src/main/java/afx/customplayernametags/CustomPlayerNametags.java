@@ -7,6 +7,7 @@ import afx.customplayernametags.config.PlayerFormatStore;
 import afx.customplayernametags.listener.PlayerConnectionListener;
 import afx.customplayernametags.manager.NametagDisplayManager;
 import afx.customplayernametags.manager.NametagManager;
+import afx.customplayernametags.update.UpdateChecker;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -18,6 +19,7 @@ public final class CustomPlayerNametags extends JavaPlugin {
     private PlayerFormatStore playerFormatStore;
     private NametagManager nametagManager;
     private NametagDisplayManager displayManager;
+    private UpdateChecker updateChecker;
 
     @Override
     public void onLoad() {
@@ -58,7 +60,31 @@ public final class CustomPlayerNametags extends JavaPlugin {
         nametagManager.startRefreshTask();
         displayManager.start();
 
+        this.updateChecker = new UpdateChecker(this);
+        updateChecker.check(this::logUpdateCheckResult);
+
         getLogger().info("CustomPlayerNametags enabled.");
+    }
+
+    /**
+     * Logs the outcome of an {@link UpdateChecker} run to console. Used
+     * both for the automatic startup check and for {@code /nametags update}
+     * when it's run from the console.
+     */
+    public void logUpdateCheckResult(UpdateChecker.Result result) {
+        if (!result.isSuccess()) {
+            getLogger().warning("Could not check for CustomPlayerNametags updates: "
+                    + result.getFailureReason());
+            return;
+        }
+        if (result.isUpdateAvailable()) {
+            getLogger().warning("A new version of CustomPlayerNametags is available: v"
+                    + result.getLatestVersion() + " (currently running v"
+                    + getDescription().getVersion() + "). Get it here: " + result.getReleaseUrl());
+        } else {
+            getLogger().info("CustomPlayerNametags is up to date (v"
+                    + getDescription().getVersion() + ").");
+        }
     }
 
     @Override
@@ -86,5 +112,9 @@ public final class CustomPlayerNametags extends JavaPlugin {
 
     public NametagManager getNametagManager() {
         return nametagManager;
+    }
+
+    public UpdateChecker getUpdateChecker() {
+        return updateChecker;
     }
 }

@@ -4,6 +4,7 @@ import afx.customplayernametags.CustomPlayerNametags;
 import afx.customplayernametags.config.ConfigManager;
 import afx.customplayernametags.manager.NametagDisplayManager;
 import afx.customplayernametags.manager.NametagManager;
+import afx.customplayernametags.update.UpdateChecker;
 import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -83,8 +84,6 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             NametagDisplayManager displayManager = nametagManager.getDisplayManager();
             if (displayManager != null) {
                 displayManager.dismount(target.getUniqueId(), durationTicks);
-                sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        "&aName tag dismounted for &e" + target.getName() + "&a for &e" + durationTicks + "&a ticks."));
             }
             return true;
         }
@@ -103,12 +102,28 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
+        if (args.length == 1 && args[0].equalsIgnoreCase("update")) {
+            UpdateChecker updateChecker = plugin.getUpdateChecker();
+            if (updateChecker == null) {
+                sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                        "&cThe update checker isn't ready yet — try again in a moment."));
+                return true;
+            }
+            sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7Checking Modrinth for updates..."));
+            // Always a fresh network check (unlike the cached result used for
+            // the OP-join notice) — this is an explicit "check now" request.
+            updateChecker.check(result -> sendUpdateCheckResult(sender, result));
+            return true;
+        }
+
         if (args.length >= 1 && args[0].equalsIgnoreCase("format")) {
             return handleFormatCommand(sender, label, args);
         }
 
         sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
                 "&cUsage: /" + label + " reload"));
+        sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                "&cUsage: /" + label + " update"));
         sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
                 "&cUsage: /" + label + " format view <unparsed|parsed> <player>"));
         sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
@@ -210,6 +225,25 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    /** Reports the outcome of an {@link UpdateChecker} run to whoever ran {@code /nametags update}. */
+    private void sendUpdateCheckResult(CommandSender sender, UpdateChecker.Result result) {
+        if (!result.isSuccess()) {
+            sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                    "&cCould not check for updates: " + result.getFailureReason()));
+            return;
+        }
+        if (result.isUpdateAvailable()) {
+            sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                    "&eA new version is available: &av" + result.getLatestVersion()
+                            + " &7(you're running &fv" + plugin.getDescription().getVersion() + "&7). &f"
+                            + result.getReleaseUrl()));
+        } else {
+            sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                    "&aYou're already running the latest version (v"
+                            + plugin.getDescription().getVersion() + ")."));
+        }
+    }
+
     /**
      * Joins {@code args[fromIndex..]} back into a single string (spaces
      * restored between tokens) and strips one layer of surrounding double
@@ -241,6 +275,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         if (args.length == 1) {
             if (isAdmin) {
                 completions.add("reload");
+                completions.add("update");
                 completions.add("format");
             }
             if (sender instanceof ConsoleCommandSender) {

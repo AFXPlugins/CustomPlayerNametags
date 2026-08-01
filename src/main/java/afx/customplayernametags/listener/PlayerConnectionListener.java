@@ -4,6 +4,8 @@ import afx.customplayernametags.CustomPlayerNametags;
 import afx.customplayernametags.config.ConfigManager;
 import afx.customplayernametags.manager.NametagDisplayManager;
 import afx.customplayernametags.manager.NametagManager;
+import afx.customplayernametags.update.UpdateChecker;
+import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -50,6 +52,33 @@ public final class PlayerConnectionListener implements Listener {
             }
             nametagManager.refresh(joined, true);
         }, 40L);
+
+        notifyOpOfUpdate(joined);
+    }
+
+    /**
+     * Messages an OP on join if a newer plugin version is already known to
+     * be available. Uses whatever {@link UpdateChecker} last found (from
+     * the startup check, or a since-run {@code /nametags update}) rather
+     * than firing a fresh Modrinth request for every join — that result is
+     * cached specifically so this stays free.
+     */
+    private void notifyOpOfUpdate(Player joined) {
+        if (!joined.isOp()) {
+            return;
+        }
+        UpdateChecker updateChecker = plugin.getUpdateChecker();
+        if (updateChecker == null) {
+            return;
+        }
+        UpdateChecker.Result result = updateChecker.getLastResult();
+        if (result == null || !result.isUpdateAvailable()) {
+            return;
+        }
+        joined.sendMessage(ChatColor.translateAlternateColorCodes('&',
+                "&e[CustomPlayerNametags] &fA new version is available: &av" + result.getLatestVersion()
+                        + " &7(you're running v" + plugin.getDescription().getVersion() + "). &f"
+                        + result.getReleaseUrl()));
     }
 
     private void applyJoinNametags(Player joined) {
