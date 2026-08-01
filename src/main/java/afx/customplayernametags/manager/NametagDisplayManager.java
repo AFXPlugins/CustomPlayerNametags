@@ -500,9 +500,21 @@ public final class NametagDisplayManager {
      * instead and is never hidden here).
      */
     private void showOneToViewer(Player owner, DisplayPair pair, Player viewer) {
-        if (!withinRenderDistance(owner, viewer)) {
+        if (!withinRenderDistance(owner, viewer) || !viewer.canSee(owner)) {
+            // Either out of range, or the owner is invisible to this
+            // specific viewer — most commonly because the owner vanished
+            // (vanish plugins hide a player via Player#hidePlayer, which is
+            // exactly what Player#canSee reflects). The passenger displays
+            // are separate entities from the owner, so nothing else here
+            // would ever notice the owner disappeared; without this check
+            // the tag was left mounted and visible, floating at the spot
+            // the owner vanished from, until an unrelated refresh (e.g. the
+            // owner crouching) happened to touch this viewer's visibility.
+            // Checked unconditionally every tick (see tickMaintain), so the
+            // tag disappears immediately instead of on some delay.
             viewer.hideEntity(plugin, pair.javaDisplay);
             viewer.hideEntity(plugin, pair.bedrockDisplay);
+            pair.bedrockHiddenFrom.remove(viewer.getUniqueId());
             return;
         }
 
@@ -572,7 +584,7 @@ public final class NametagDisplayManager {
      *                          applies (see {@link #buildTransformation}).
      */
     private TextDisplay createDisplay(Player owner, Component bright, Location loc, boolean sneaking,
-                                       boolean forBedrockViewer) {
+                                      boolean forBedrockViewer) {
         World world = loc.getWorld();
         if (world == null) {
             return null;
@@ -694,7 +706,7 @@ public final class NametagDisplayManager {
     }
 
     private void applySneakStateToOne(TextDisplay display, Component text, byte opacity,
-                                       boolean sneaking, boolean forBedrockViewer, boolean occluded) {
+                                      boolean sneaking, boolean forBedrockViewer, boolean occluded) {
         display.setSeeThrough(effectiveSeeThrough(sneaking, occluded));
 
         if (forBedrockViewer) {
@@ -990,15 +1002,20 @@ public final class NametagDisplayManager {
             Boolean previous = lastSneaking.put(uuid, sneaking);
             if (previous == null || previous != sneaking) {
                 applySneakState(player, pair, sneaking);
-            } else if (sneaking) {
-                // Refresh Bedrock LOS + render distance every tick while sneaking.
-                applyViewerVisibility(player, pair, true);
-            } else if (currentTick % SEE_THROUGH_REFRESH_INTERVAL_TICKS == 0) {
-                // Standing: periodically refresh render-distance visibility
-                // and wall-occlusion see-through state (throttled — see
-                // SEE_THROUGH_REFRESH_INTERVAL_TICKS).
-                applyViewerVisibility(player, pair, false);
-                refreshSeeThroughState(player, pair);
+            } else {
+                // Refresh render-distance visibility, vanish (canSee), and
+                // Bedrock LOS every tick regardless of sneak state — not
+                // just while sneaking — so a viewer losing sight of the
+                // owner (e.g. the owner vanishing) hides the tag right
+                // away instead of waiting for a sneak toggle or the
+                // throttled see-through pass below.
+                applyViewerVisibility(player, pair, sneaking);
+                if (!sneaking && currentTick % SEE_THROUGH_REFRESH_INTERVAL_TICKS == 0) {
+                    // Standing: periodically refresh wall-occlusion
+                    // see-through state (throttled — raytrace-heavy, see
+                    // SEE_THROUGH_REFRESH_INTERVAL_TICKS).
+                    refreshSeeThroughState(player, pair);
+                }
             }
         }
     }
