@@ -14,10 +14,10 @@ commands:
     description: CustomPlayerNametags commands
     usage: /nametags reload | /nametags update | /nametags dismount <player> [ticks] (console only) | /nametags format view <unparsed|parsed> <player> | /nametags format set <player> "<format>" | /nametags format reset <player>
     aliases: [customplayernametags]
-    permission: nametag.admin
+    permission: customplayernametags.admin
     permission-message: You do not have permission to use this command.
 
 permissions:
-  nametag.admin:
+  customplayernametags.admin:
     description: Allows use of all CustomPlayerNametags commands.
     default: op
