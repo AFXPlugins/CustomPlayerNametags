@@ -120,7 +120,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             return handleFormatCommand(sender, label, args);
         }
 
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&eUsages:));
+        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&eUsages:"));
         sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " reload &e- Reload the plugin."));
         sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " update &e- Check plugin for updates."));
         sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format view <unparsed|parsed> <player> &e- View a player's nametag format."));
