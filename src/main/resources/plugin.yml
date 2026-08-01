@@ -4,7 +4,7 @@ main: afx.customplayernametags.CustomPlayerNametags
 api-version: '26.2'
 author: AFXPlugins
 description: >
-  Customizable overhead nametags for every player.
+  Fully customizable player nametags.
 
 depend: [packetevents, PlaceholderAPI]
 softdepend: [LuckPerms, Essentials]
@@ -19,5 +19,5 @@ commands:
 
 permissions:
   nametag.admin:
-    description: Allows use of /nametags commands.
+    description: Allows use of /nametags reload (or /customplayernametags reload) and other admin actions.
     default: op

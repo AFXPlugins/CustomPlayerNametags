@@ -125,18 +125,33 @@ public final class PlayerConnectionListener implements Listener {
     }
 
     /**
-     * When a player changes worlds, immediately remounts their nametag and
+     * When a player changes worlds, remounts their nametag and
      * cancels/removes any active dismount timer instead of waiting for it
      * to expire. {@link NametagManager#refresh} respawns the display
      * entities (they can't follow a player across worlds), and that
      * respawn path — via {@link NametagDisplayManager#remove} — clears any
-     * pending dismount window before immediately re-mounting the fresh
-     * entities, so the tag never sits dismounted longer than the world
-     * change itself.
+     * pending dismount window before re-mounting the fresh entities, so the
+     * tag never sits dismounted longer than the world change itself.
+     *
+     * <p>Deferred to the next tick (matching {@link #onRespawn}) rather
+     * than run synchronously inside the event: the fresh displays'
+     * visibility is applied via {@code Player#showEntity} for every other
+     * online player, which only takes effect once the server's entity
+     * tracker has actually caught up to the just-arrived player in their
+     * destination world. Doing that in the same tick as the world-change
+     * event races the tracker and silently no-ops for viewers already
+     * present in that world — the tag then stayed invisible to them until
+     * something else (e.g. the owner crouching) re-ran the same visibility
+     * pass a moment later. One tick is enough for the tracker to catch up.
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onWorldChange(PlayerChangedWorldEvent event) {
-        nametagManager.refresh(event.getPlayer(), true);
+        Player player = event.getPlayer();
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (player.isOnline()) {
+                nametagManager.refresh(player, true);
+            }
+        });
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

@@ -12,6 +12,15 @@ public final class ConfigManager {
 
     private static final String DEFAULT_FORMAT = "%luckperms_prefix%%essentials_nickname%";
 
+    /** Height (in blocks) the nametag floats above the player. */
+    private static final double NAMETAG_HEIGHT_OFFSET = 2.085;
+    /** Extra height while sneaking, for all viewers. */
+    private static final double SNEAK_HEIGHT_ADJUST = 0.270;
+    /** Height correction for Bedrock/Geyser viewers only (standing + sneaking). */
+    private static final double BEDROCK_HEIGHT_ADJUST = -0.155;
+    /** Extra height for Bedrock/Geyser viewers while sneaking. */
+    private static final double BEDROCK_SNEAK_HEIGHT_ADJUST = 0.25;
+
     /**
      * Controls when the plugin automatically dismounts a player's nametag
      * in response to a command they run. Configured via
@@ -44,10 +53,7 @@ public final class ConfigManager {
     private final CustomPlayerNametags plugin;
 
     private String nametagFormat;
-    private double nametagHeightOffset;
-    private double sneakHeightAdjust;
-    private double bedrockHeightAdjust;
-    private double bedrockSneakHeightAdjust;
+    private double nametagRenderDistance;
     private long dismountDurationTicks;
     private DismountMode nametagDismountMode;
     private List<List<String>> dismountCommands;
@@ -61,10 +67,10 @@ public final class ConfigManager {
         FileConfiguration cfg = plugin.getConfig();
 
         this.nametagFormat = cfg.getString("nametag-format", DEFAULT_FORMAT);
-        this.nametagHeightOffset = cfg.getDouble("nametag-height-offset", 2.1);
-        this.sneakHeightAdjust = cfg.getDouble("sneak-height-adjust", 0.25);
-        this.bedrockHeightAdjust = cfg.getDouble("bedrock-height-adjust", -0.10);
-        this.bedrockSneakHeightAdjust = cfg.getDouble("bedrock-sneak-height-adjust", 0.25);
+
+        // Default: 64 blocks, vanilla's own fixed cutoff for rendering any
+        // entity nametag regardless of server entity-tracking-range settings.
+        this.nametagRenderDistance = cfg.getDouble("nametag-render-distance", 64.0);
 
         // Default: 300 ticks (15 seconds)
         this.dismountDurationTicks = Math.max(0L, cfg.getLong("dismount-duration-ticks", 300L));
@@ -128,12 +134,12 @@ public final class ConfigManager {
     }
 
     public double getNametagHeightOffset() {
-        return nametagHeightOffset;
+        return NAMETAG_HEIGHT_OFFSET;
     }
 
     /** Extra height added back while sneaking, on top of the pose-tracking translation, to keep the tag from riding too low. */
     public double getSneakHeightAdjust() {
-        return sneakHeightAdjust;
+        return SNEAK_HEIGHT_ADJUST;
     }
 
     /**
@@ -145,7 +151,7 @@ public final class ConfigManager {
      * the tag's owner.
      */
     public double getBedrockHeightAdjust() {
-        return bedrockHeightAdjust;
+        return BEDROCK_HEIGHT_ADJUST;
     }
 
     /**
@@ -162,7 +168,18 @@ public final class ConfigManager {
      * height as Java viewers.
      */
     public double getBedrockSneakHeightAdjust() {
-        return bedrockSneakHeightAdjust;
+        return BEDROCK_SNEAK_HEIGHT_ADJUST;
+    }
+
+    /**
+     * Maximum distance (in blocks) from a viewer at which their custom
+     * TextDisplay nametag is shown at all, matching vanilla's own fixed
+     * client-side nametag render cutoff (64 blocks) rather than whatever
+     * the server's entity-tracking-range is set to. Configured via
+     * {@code nametag-render-distance} in config.yml.
+     */
+    public double getNametagRenderDistance() {
+        return nametagRenderDistance;
     }
 
     /**

@@ -115,9 +115,13 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * Standing vs. sneaking look:
  * <ul>
- *   <li><b>Standing:</b> full-brightness, fully-opaque text. Rendered solid
- *       (normal depth-tested rendering, not see-through) so it's occluded
- *       by walls/blocks like any other entity, matching vanilla.</li>
+ *   <li><b>Standing:</b> full-brightness, fully-opaque text. For Java
+ *       viewers, switches into "see-through" render mode only while at
+ *       least one Java viewer within render distance is actually being
+ *       blocked from seeing the tag by a wall — see
+ *       {@link #anyJavaViewerOccluded} for why this is a same-for-everyone
+ *       approximation rather than truly per-viewer. Bedrock/Geyser viewers
+ *       always see the tag occluded by blocks like vanilla.</li>
  *   <li><b>Sneaking:</b> text colors darkened (component rewrite), reduced
  *       opacity, and per-viewer line-of-sight checks so the tag stays visible
  *       in the open but is hidden when a wall blocks the view. Works for both
@@ -173,6 +177,18 @@ public final class NametagDisplayManager {
      */
     private static final int HEIGHT_TRANSITION_TICKS = 4;
 
+    /**
+     * How often (in ticks) {@link #tickMaintain} re-checks render-distance
+     * visibility and wall-occlusion see-through state for a standing
+     * player. Unlike sneak-state changes (which must react on the very tick
+     * they happen), a viewer walking into/out of render range or stepping
+     * behind a wall doesn't need per-tick precision — a few ticks of lag is
+     * imperceptible, and checking every online viewer against every owner
+     * this often instead of every tick meaningfully cuts the cost on
+     * populated servers.
+     */
+    private static final long SEE_THROUGH_REFRESH_INTERVAL_TICKS = 4;
+
     /** Identity rotation, reused for every {@link Transformation} we build. */
     private static final Quaternionf IDENTITY_ROTATION = new Quaternionf();
 
@@ -191,6 +207,25 @@ public final class NametagDisplayManager {
      * {@link #dim} so Java and Bedrock get the same dull crouch look.
      */
     private static final byte OPACITY_SNEAKING = (byte) 100;
+
+    /**
+     * Fixed light-level override applied to every nametag TextDisplay.
+     *
+     * <p>Without this, the client computes the entity's render brightness
+     * from the actual block/sky light at its position — <em>except</em>
+     * when {@code see_through} is active, in which case vanilla rendering
+     * ignores that computed light level and draws the text at full
+     * brightness instead so it reads clearly through blocks. That makes a
+     * tag flip to noticeably brighter the instant a viewer loses direct
+     * line of sight (e.g. stepping behind a wall), then flip back once
+     * they regain it.
+     *
+     * <p>Setting an explicit {@link Display.Brightness} pins the light
+     * level used for rendering regardless of {@code see_through} or actual
+     * world lighting, so the tag looks the same whether or not it's being
+     * drawn through a wall.
+     */
+    private static final Display.Brightness NAMETAG_BRIGHTNESS = new Display.Brightness(15, 15);
 
     private final CustomPlayerNametags plugin;
     private final ConfigManager config;
@@ -320,7 +355,23 @@ public final class NametagDisplayManager {
             displays.put(target.getUniqueId(), pair);
         } else {
             applyAppearance(pair);
-            ensureMounted(target, pair);
+            // The periodic per-second refresh (NametagManager's refresh
+            // task) calls update() independently of tickMaintain()'s own
+            // 1-tick loop — it is NOT gated on the dismount window at all.
+            // Unconditionally calling ensureMounted() here re-attaches the
+            // passenger mid-dismount whenever this refresh happens to land
+            // inside the window opened by dismount(), silently undoing it
+            // and leaving the teleport blocked again a moment later. This
+            // is why the failure was intermittent (~1 in REFRESH_INTERVAL_TICKS
+            // chance of the refresh landing inside the dismount window)
+            // rather than constant. Skipping the remount here while a
+            // dismount is active — mirroring the same check tickMaintain()
+            // already does — closes that race.
+            Long dismountUntil = dismountUntilTick.get(target.getUniqueId());
+            boolean dismountActive = dismountUntil != null && currentTick < dismountUntil;
+            if (!dismountActive) {
+                ensureMounted(target, pair);
+            }
             boolean sneaking = target.isSneaking();
             Boolean previous = lastSneaking.put(target.getUniqueId(), sneaking);
             if (forceAppearance || previous == null || previous != sneaking) {
@@ -359,16 +410,31 @@ public final class NametagDisplayManager {
         if (pair == null) {
             return;
         }
-        dismountOne(pair.javaDisplay);
-        dismountOne(pair.bedrockDisplay);
+        // Resolve the owner and remove from the OWNER's passenger list
+        // directly, rather than relying solely on display.getVehicle().
+        // getVehicle() and the owner's own passenger list can briefly
+        // desync (see the identical note in removeOne() below); trusting
+        // only the display-side pointer meant that whenever it was null or
+        // stale at the exact instant this ran, removePassenger() never got
+        // called and the owner was left still carrying the passenger —
+        // which is exactly what silently blocks a same-tick cross-world
+        // teleport immediately afterward. Clearing both sides closes that
+        // race so the dismount is guaranteed to have actually taken effect
+        // by the time this method returns.
+        Player owner = Bukkit.getPlayer(uuid);
+        dismountOne(owner, pair.javaDisplay);
+        dismountOne(owner, pair.bedrockDisplay);
     }
 
-    private void dismountOne(TextDisplay display) {
+    private void dismountOne(Player owner, TextDisplay display) {
         if (display == null || !display.isValid()) {
             return;
         }
+        if (owner != null) {
+            owner.removePassenger(display);
+        }
         Entity vehicle = display.getVehicle();
-        if (vehicle != null) {
+        if (vehicle != null && vehicle != owner) {
             vehicle.removePassenger(display);
         }
     }
@@ -379,23 +445,32 @@ public final class NametagDisplayManager {
         brightTexts.remove(uuid);
         dismountUntilTick.remove(uuid);
         if (pair != null) {
-            removeOne(pair.javaDisplay);
-            removeOne(pair.bedrockDisplay);
+            Player owner = Bukkit.getPlayer(uuid);
+            removeOne(owner, pair.javaDisplay);
+            removeOne(owner, pair.bedrockDisplay);
         }
     }
 
-    private void removeOne(TextDisplay display) {
+    private void removeOne(Player owner, TextDisplay display) {
         if (display != null && display.isValid()) {
-            // Explicitly break the passenger link first. Entity#remove()
-            // does not guarantee the vehicle's (the owning player's)
-            // passenger list is cleared in the same synchronous call —
-            // that stale reference is long enough for Bukkit's cross-world
-            // teleport handling to still see the player as carrying a
-            // passenger and block the teleport, even when this remove() is
-            // called from PlayerConnectionListener#onTeleport right before
-            // the actual move. Dismounting directly removes that race.
+            // Explicitly break the passenger link first, from BOTH sides.
+            // Entity#remove() does not guarantee the vehicle's (the owning
+            // player's) passenger list is cleared in the same synchronous
+            // call — that stale reference is long enough for Bukkit's
+            // cross-world teleport handling to still see the player as
+            // carrying a passenger and block the teleport, even when this
+            // remove() is called from PlayerConnectionListener#onTeleport
+            // right before the actual move. Relying only on
+            // display.getVehicle() isn't enough on its own — that pointer
+            // and the owner's own passenger list can themselves desync —
+            // so the owner's list is cleared directly first, with
+            // getVehicle() as a fallback for the (rare) case the owner
+            // reference isn't available.
+            if (owner != null) {
+                owner.removePassenger(display);
+            }
             Entity vehicle = display.getVehicle();
-            if (vehicle != null) {
+            if (vehicle != null && vehicle != owner) {
                 vehicle.removePassenger(display);
             }
             display.remove();
@@ -425,6 +500,12 @@ public final class NametagDisplayManager {
      * instead and is never hidden here).
      */
     private void showOneToViewer(Player owner, DisplayPair pair, Player viewer) {
+        if (!withinRenderDistance(owner, viewer)) {
+            viewer.hideEntity(plugin, pair.javaDisplay);
+            viewer.hideEntity(plugin, pair.bedrockDisplay);
+            return;
+        }
+
         boolean viewerIsBedrock = BedrockDetector.isBedrockPlayer(viewer);
         boolean sneaking = owner.isSneaking();
 
@@ -497,7 +578,7 @@ public final class NametagDisplayManager {
             return null;
         }
 
-        final Component displayText = sneaking ? dim(bright) : bright;
+        final Component displayText = sneaking ? dim(bright, forBedrockViewer) : bright;
         final Transformation transformation = buildTransformation(sneaking, forBedrockViewer);
 
         return world.spawn(loc, TextDisplay.class, entity -> {
@@ -511,13 +592,17 @@ public final class NametagDisplayManager {
             entity.setVisibleByDefault(false);
             entity.setShadowed(false);
             entity.setDefaultBackground(true);
+            // Pin the render light level so toggling see_through (below)
+            // never causes the text to jump to a different brightness —
+            // see NAMETAG_BRIGHTNESS javadoc.
+            entity.setBrightness(NAMETAG_BRIGHTNESS);
             // No easing on the very first frame — nothing to ease from yet.
             entity.setInterpolationDelay(0);
             entity.setInterpolationDuration(0);
             entity.setTransformation(transformation);
             // Must be set here (pre-track) so Java clients receive see_through
             // on the spawn metadata packet. Later in-place changes are ignored.
-            entity.setSeeThrough(effectiveSeeThrough(sneaking));
+            entity.setSeeThrough(effectiveSeeThrough(sneaking, anyJavaViewerOccluded(owner)));
             entity.setTextOpacity(sneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
         });
     }
@@ -551,12 +636,27 @@ public final class NametagDisplayManager {
             bright = pair.javaDisplay.text();
             brightTexts.put(owner.getUniqueId(), bright);
         }
-        Component text = sneaking ? dim(bright) : bright;
+        Component javaText = sneaking ? dim(bright, false) : bright;
+        Component bedrockText = sneaking ? dim(bright, true) : bright;
         byte opacity = sneaking ? OPACITY_SNEAKING : OPACITY_STANDING;
-        pair.javaDisplay.text(text);
+        pair.javaDisplay.text(javaText);
         pair.javaDisplay.setTextOpacity(opacity);
-        pair.bedrockDisplay.text(text);
+        pair.bedrockDisplay.text(bedrockText);
         pair.bedrockDisplay.setTextOpacity(opacity);
+    }
+
+    /**
+     * Re-checks {@link #anyJavaViewerOccluded} for a standing owner and
+     * applies the result to {@code javaDisplay}'s {@code see_through} flag.
+     * Called periodically from {@link #tickMaintain} (not on sneak-state
+     * change, which already goes through {@link #applySneakState} instead)
+     * so the wall-occlusion effect turns on/off as viewers move behind
+     * walls or in/out of render range, without waiting for the owner to
+     * crouch. Never touches height, opacity, or text.
+     */
+    private void refreshSeeThroughState(Player owner, DisplayPair pair) {
+        boolean seeThrough = effectiveSeeThrough(false, anyJavaViewerOccluded(owner));
+        pair.javaDisplay.setSeeThrough(seeThrough);
     }
 
     /**
@@ -564,7 +664,7 @@ public final class NametagDisplayManager {
      * Always keeps the configured format (never falls back to the raw username).
      *
      * <p>Crouch: grey text + reduced opacity + LOS occlusion for Bedrock viewers.
-     * Standing: full-colour text + full opacity + see-through.
+     * Standing: full-colour text + full opacity + wall-occlusion-gated see-through.
      *
      * <p>The height change itself is a {@link Transformation} ease on the
      * already-mounted passengers — never a position teleport — so there's
@@ -582,18 +682,20 @@ public final class NametagDisplayManager {
             nametagManager.setVanillaNametagHidden(owner, true);
         }
 
-        Component text = sneaking ? dim(bright) : bright;
+        Component javaText = sneaking ? dim(bright, false) : bright;
+        Component bedrockText = sneaking ? dim(bright, true) : bright;
         byte opacity = sneaking ? OPACITY_SNEAKING : OPACITY_STANDING;
+        boolean occluded = anyJavaViewerOccluded(owner);
 
-        applySneakStateToOne(pair.javaDisplay, text, opacity, sneaking, false);
-        applySneakStateToOne(pair.bedrockDisplay, text, opacity, sneaking, true);
+        applySneakStateToOne(pair.javaDisplay, javaText, opacity, sneaking, false, occluded);
+        applySneakStateToOne(pair.bedrockDisplay, bedrockText, opacity, sneaking, true, occluded);
 
         applyViewerVisibility(owner, pair, sneaking);
     }
 
     private void applySneakStateToOne(TextDisplay display, Component text, byte opacity,
-                                       boolean sneaking, boolean forBedrockViewer) {
-        display.setSeeThrough(effectiveSeeThrough(sneaking));
+                                       boolean sneaking, boolean forBedrockViewer, boolean occluded) {
+        display.setSeeThrough(effectiveSeeThrough(sneaking, occluded));
 
         if (forBedrockViewer) {
             display.text(text);
@@ -644,15 +746,60 @@ public final class NametagDisplayManager {
     }
 
     /**
-     * The nametag always renders solid (normal depth-tested rendering, not
-     * Minecraft's "see through" mode) — not configurable. This keeps the
-     * text properly hidden behind walls/blocks like any other entity
-     * (matching vanilla behavior) and avoids the client mis-sorting a
-     * see-through entity against other translucent geometry (water, glass,
-     * clouds, banners) behind it.
+     * Java viewers only (Geyser ignores {@code see_through} entirely — see
+     * {@link #hasLineOfSight}). While the owner is standing, the tag only
+     * switches into Minecraft's "see through" render mode when at least one
+     * Java viewer within {@link ConfigManager#getNametagRenderDistance()}
+     * currently has their line of sight to the tag blocked by a wall — see
+     * {@link #anyJavaViewerOccluded}. Sneaking always forces it off, going
+     * back to normal depth-tested rendering (occluded by walls like any
+     * other entity, matching vanilla).
      */
-    private boolean effectiveSeeThrough(boolean sneaking) {
+    private boolean effectiveSeeThrough(boolean sneaking, boolean occludedForSomeViewer) {
+        return !sneaking && occludedForSomeViewer;
+    }
+
+    /**
+     * {@code see_through} is entity-wide metadata — Paper has no way to send
+     * a different value of it to different viewers of the same entity — so
+     * this can only be an aggregate approximation of "being looked at
+     * through a wall": if <em>any</em> online Java viewer within render
+     * distance currently has {@code owner}'s tag blocked from their line of
+     * sight, see-through switches on for every viewer who can see the tag,
+     * not just the one who's actually behind a wall. That's the closest
+     * this can get without spawning a separate entity per viewer.
+     */
+    private boolean anyJavaViewerOccluded(Player owner) {
+        Location tagLocation = effectiveLocation(owner);
+        for (Player viewer : Bukkit.getOnlinePlayers()) {
+            if (viewer.getUniqueId().equals(owner.getUniqueId())) {
+                continue;
+            }
+            if (BedrockDetector.isBedrockPlayer(viewer)) {
+                continue;
+            }
+            if (!withinRenderDistance(owner, viewer)) {
+                continue;
+            }
+            if (!hasLineOfSight(viewer, tagLocation)) {
+                return true;
+            }
+        }
         return false;
+    }
+
+    /**
+     * True if {@code viewer} is close enough to {@code owner} to have their
+     * nametag shown at all, matching vanilla's own fixed nametag render
+     * cutoff rather than whatever the server's entity-tracking-range happens
+     * to be set to (see {@link ConfigManager#getNametagRenderDistance()}).
+     */
+    private boolean withinRenderDistance(Player owner, Player viewer) {
+        if (owner.getWorld() != viewer.getWorld()) {
+            return false;
+        }
+        double max = config.getNametagRenderDistance();
+        return owner.getLocation().distanceSquared(viewer.getLocation()) <= max * max;
     }
 
     /**
@@ -749,7 +896,7 @@ public final class NametagDisplayManager {
      * clients (they ignore {@code text_opacity} updates on these Displays).
      */
     /**
-     * Solid, near-white grey used for the crouch nametag on every platform.
+     * Solid, near-white grey used for the crouch nametag on Java viewers.
      * Kept light rather than a dark/mid grey so it stays readable — a
      * darker grey was hard to make out, especially for Bedrock/Geyser
      * viewers.
@@ -757,18 +904,28 @@ public final class NametagDisplayManager {
     private static final TextColor SNEAK_GREY = TextColor.color(225, 225, 225);
 
     /**
-     * Forces the whole component tree to {@link #SNEAK_GREY} so Java and
-     * Bedrock share the same dull crouch colour (rank/name colours are dropped
-     * while sneaking, matching vanilla's greyed nametag).
+     * Slightly darker, more grey crouch color used only for the
+     * Bedrock-viewed display. Same idea as {@link #SNEAK_GREY} but a touch
+     * more muted for Bedrock/Geyser viewers specifically.
      */
-    private static Component dim(Component in) {
+    private static final TextColor SNEAK_GREY_BEDROCK = TextColor.color(190, 190, 190);
+
+    /**
+     * Forces the whole component tree to a flat crouch grey (rank/name
+     * colours are dropped while sneaking, matching vanilla's greyed
+     * nametag) — {@link #SNEAK_GREY} for Java viewers, or the slightly
+     * darker {@link #SNEAK_GREY_BEDROCK} when {@code forBedrockViewer} is
+     * true.
+     */
+    private static Component dim(Component in, boolean forBedrockViewer) {
+        TextColor color = forBedrockViewer ? SNEAK_GREY_BEDROCK : SNEAK_GREY;
         Style style = in.style();
-        Component out = in.style(style.toBuilder().color(SNEAK_GREY).build());
+        Component out = in.style(style.toBuilder().color(color).build());
         List<Component> children = in.children();
         if (!children.isEmpty()) {
             List<Component> dimmed = new ArrayList<>(children.size());
             for (Component child : children) {
-                dimmed.add(dim(child));
+                dimmed.add(dim(child, forBedrockViewer));
             }
             out = out.children(dimmed);
         }
@@ -834,8 +991,14 @@ public final class NametagDisplayManager {
             if (previous == null || previous != sneaking) {
                 applySneakState(player, pair, sneaking);
             } else if (sneaking) {
-                // Refresh Bedrock LOS only; position itself needs no work.
+                // Refresh Bedrock LOS + render distance every tick while sneaking.
                 applyViewerVisibility(player, pair, true);
+            } else if (currentTick % SEE_THROUGH_REFRESH_INTERVAL_TICKS == 0) {
+                // Standing: periodically refresh render-distance visibility
+                // and wall-occlusion see-through state (throttled — see
+                // SEE_THROUGH_REFRESH_INTERVAL_TICKS).
+                applyViewerVisibility(player, pair, false);
+                refreshSeeThroughState(player, pair);
             }
         }
     }
