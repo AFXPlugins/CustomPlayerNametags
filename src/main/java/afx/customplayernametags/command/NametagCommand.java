@@ -126,11 +126,6 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format view <unparsed|parsed> <player> &e- View a player's nametag format."));
         sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format set <player> \"<format>\" &e- Set a player's nametag format."));
         sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format reset <player> &e- Reset a player's nametag format."));
-
-        if (sender instanceof ConsoleCommandSender) {
-            sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    "&f/" + label + " dismount <player> [ticks] &e- Dismount the player's nametag."));
-        }
         return true;
     }
 
