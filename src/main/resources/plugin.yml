@@ -11,7 +11,7 @@ softdepend: [PlaceholderAPI]
 
 commands:
   nametags:
-    description: Manage the CustomPlayerNametags plugin.
+    description: CustomPlayerNametags commands
     usage: /nametags reload | /nametags update | /nametags dismount <player> [ticks] (console only) | /nametags format view <unparsed|parsed> <player> | /nametags format set <player> "<format>" | /nametags format reset <player>
     aliases: [customplayernametags]
     permission: nametag.admin
@@ -19,5 +19,5 @@ commands:
 
 permissions:
   nametag.admin:
-    description: Allows use of /nametags reload (or /customplayernametags reload) and other admin actions.
+    description: Allows use of all CustomPlayerNametags commands.
     default: op
