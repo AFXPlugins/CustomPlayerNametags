@@ -58,13 +58,14 @@ public final class NametagManager {
         this.plugin = plugin;
         this.config = config;
         this.formatStore = formatStore;
-        this.placeholderApiAvailable = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
-        if (!placeholderApiAvailable) {
-            plugin.getLogger().warning(
-                    "PlaceholderAPI not found — nametag-format placeholders (e.g. %player_name%) "
-                            + "will NOT be resolved. Only literal text and '&' color codes will show. "
-                            + "Install PlaceholderAPI to enable placeholder support.");
+        this.placeholderApiAvailable = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")
+
+        if (placeholderApiAvailable) {
+            plugin.getLogger().info("PlaceholderAPI hooked successfully.");
+        } else {
+            plugin.getLogger().info("PlaceholderAPI not found. Placeholder support disabled.");
         }
+
     }
 
     public void setDisplayManager(NametagDisplayManager displayManager) {
