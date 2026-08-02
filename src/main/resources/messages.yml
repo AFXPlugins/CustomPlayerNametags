@@ -21,6 +21,7 @@ no-permission: "&cYou do not have permission to do that."
 reload-success: "&aCustomPlayerNametags reloaded."
 player-not-found: "&cThat player isn't online."
 console-only: "&cThat subcommand is console-only."
+global-format-disabled: "&cThe global nametag format is disabled because PlaceholderAPI isn't installed."
 # --------------------------------------------------------
 
 

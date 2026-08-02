@@ -153,12 +153,20 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
     private boolean handleFormatCommand(CommandSender sender, String label, String[] args) {
         if (args.length >= 2 && args[1].equalsIgnoreCase("view")) {
             if (args.length == 4 && args[2].equalsIgnoreCase("global") && args[3].equalsIgnoreCase("unparsed")) {
+                if (!nametagManager.isPlaceholderApiAvailable()) {
+                    messages.send(sender, "global-format-disabled");
+                    return true;
+                }
                 messages.send(sender, "format-view-global-unparsed-header");
                 sender.sendMessage(nametagManager.getGlobalRawFormat());
                 return true;
             }
 
             if (args.length == 5 && args[2].equalsIgnoreCase("global") && args[3].equalsIgnoreCase("parsed")) {
+                if (!nametagManager.isPlaceholderApiAvailable()) {
+                    messages.send(sender, "global-format-disabled");
+                    return true;
+                }
                 // Parsing needs a player context — PlaceholderAPI can't
                 // resolve player-only placeholders otherwise.
                 Player target = Bukkit.getPlayerExact(args[4]);
@@ -207,6 +215,10 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
 
         if (args.length >= 2 && args[1].equalsIgnoreCase("set")) {
             if (args.length >= 3 && args[2].equalsIgnoreCase("global")) {
+                if (!nametagManager.isPlaceholderApiAvailable()) {
+                    messages.send(sender, "global-format-disabled");
+                    return true;
+                }
                 String newFormat = joinAndUnquote(args, 3);
                 if (newFormat.isEmpty()) {
                     messages.sendList(sender, "usage-format-set", "{label}", label);
@@ -245,6 +257,10 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
 
         if (args.length >= 2 && args[1].equalsIgnoreCase("reset")) {
             if (args.length == 3 && args[2].equalsIgnoreCase("global")) {
+                if (!nametagManager.isPlaceholderApiAvailable()) {
+                    messages.send(sender, "global-format-disabled");
+                    return true;
+                }
                 config.resetGlobalFormat();
                 nametagManager.refreshAll();
                 messages.send(sender, "format-reset-global-success");
