@@ -16,11 +16,9 @@
 # How to use PlaceholderAPI placeholders:
 # https://wiki.placeholderapi.com/users/using-placeholders/
 #
-# Global format used for player nametags. Use PlaceholderAPI placeholders
-# to set global format for all players.
-# Use "/nametags format" to override the global format and set custom
-# formats for individual players.
-
+# Global format used for all player nametags.
+# Supports PlaceholderAPI placeholders and '&' colors.
+# Use "/nametags format" to set custom formats for individual players.
 # Example: "%luckperms_prefix%%essentials_nickname%"
 nametag-format: "%player_name%"
 # ========================================================================
@@ -30,13 +28,13 @@ nametag-format: "%player_name%"
 #                             NAMETAG DISMOUNTING
 # ==============================================================================
 # The nametag is attached to the player using an invisible passenger entity,
-# keeping it in a fixed position above the player.
+#  keeping it in a fixed position above the player.
 
-# Some commands that teleport players to different worlds/dimensions
-# can fail if the "passenger" is still attached.
+# Some commands that teleport players to different worlds/dimensions can fail
+#  if the "passenger" is still attached.
 
 # To prevent this, the plugin can temporarily dismount the passenger before
-# the teleport happens and automatically remount on world change.
+#  the teleport happens and automatically remount on world change.
 
 
 # -------------------------------------------------------------------------------
@@ -45,13 +43,13 @@ nametag-format: "%player_name%"
 # No world management plugin? Set nametag-dismount-mode to "NONE".
 #
 # Using Multiverse-Core? Set nametag-dismount-mode to "NONE", then set
-# passenger-mode to "dismount_passengers" in the Multiverse-Core config.
+#  passenger-mode to "dismount_passengers" in the Multiverse-Core config.
 #
 # Using other world management plugin? Set nametag-dismount-mode to "MANUAL" and
-# add plugin's teleport commands to dismount-commands.
+#  add plugin's teleport commands to dismount-commands.
 #
 # Using Skript? Implement this console command before cross-world teleport:
-# /nametags dismount <player>
+#  /nametags dismount <player>
 # -------------------------------------------------------------------------------
 
 
@@ -61,10 +59,10 @@ nametag-format: "%player_name%"
 #   NONE   - Disables nametag dismounting.
 # ------------------------------------------------------------------------
 #   AUTO   - Automatically dismounts the nametag whenever the player runs
-#            a command.
+#             a command.
 # ------------------------------------------------------------------------
 #   MANUAL - Only dismounts the nametag when a command listed in
-#            dismount-commands is run.
+#             dismount-commands is run.
 # ------------------------------------------------------------------------
 nametag-dismount-mode: AUTO
 
@@ -89,6 +87,7 @@ nametag-render-distance: 64
 
 
 
-
+# =================================
 # PLEASE DO NOT CHANGE THIS VALUE!
 plugin-version: 1
+# =================================
