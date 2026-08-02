@@ -2,10 +2,10 @@ package afx.customplayernametags.listener;
 
 import afx.customplayernametags.CustomPlayerNametags;
 import afx.customplayernametags.config.ConfigManager;
+import afx.customplayernametags.config.MessageManager;
 import afx.customplayernametags.manager.NametagDisplayManager;
 import afx.customplayernametags.manager.NametagManager;
 import afx.customplayernametags.update.UpdateChecker;
-import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -26,11 +26,14 @@ public final class PlayerConnectionListener implements Listener {
     private final CustomPlayerNametags plugin;
     private final ConfigManager config;
     private final NametagManager nametagManager;
+    private final MessageManager messages;
 
-    public PlayerConnectionListener(CustomPlayerNametags plugin, ConfigManager config, NametagManager nametagManager) {
+    public PlayerConnectionListener(CustomPlayerNametags plugin, ConfigManager config, NametagManager nametagManager,
+                                    MessageManager messages) {
         this.plugin = plugin;
         this.config = config;
         this.nametagManager = nametagManager;
+        this.messages = messages;
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -75,10 +78,10 @@ public final class PlayerConnectionListener implements Listener {
         if (result == null || !result.isUpdateAvailable()) {
             return;
         }
-        joined.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                "&e[CustomPlayerNametags] &fA new version is available: &av" + result.getLatestVersion()
-                        + " &7(you're running v" + plugin.getDescription().getVersion() + "). &f"
-                        + result.getReleaseUrl()));
+        messages.send(joined, "op-update-notice",
+                "{version}", result.getLatestVersion(),
+                "{current}", plugin.getDescription().getVersion(),
+                "{url}", result.getReleaseUrl());
     }
 
     private void applyJoinNametags(Player joined) {

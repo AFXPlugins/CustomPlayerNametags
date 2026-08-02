@@ -1,0 +1,94 @@
+#   _____         __             ___  __                  _  __               __
+#  / ___/_ _____ / /____  __ _  / _ \/ /__ ___ _____ ____/ |/ /__ ___ _  ___ / /____ ____ ____
+# / /__/ // (_-</ __/ _ \/  ' \/ ___/ / _ `/ // / -_) __/    / _ `/  ' \/ -_) __/ _ `/ _ `(_-<
+# \___/\_,_/___/\__/\___/_/_/_/_/  /_/\_,_/\_, /\__/_/ /_/|_/\_,_/_/_/_/\__/\__/\_,_/\_, /___/
+#                                         /___/                                     /___/
+
+
+# =================================
+# Reload command: /nametags reload
+# =================================
+
+
+# =============================================================================================================================
+#                                                 CustomPlayerNametags Messages
+# =============================================================================================================================
+
+
+# General
+# --------------------------------------------------------
+no-permission: "&cYou do not have permission to do that."
+reload-success: "&aCustomPlayerNametags reloaded."
+player-not-found: "&cThat player isn't online."
+console-only: "&cThat subcommand is console-only."
+# --------------------------------------------------------
+
+
+# /nametags dismount <player>
+# ----------------------------------------------------
+dismount-usage: "&cUsage: /{label} dismount <player>"
+# ----------------------------------------------------
+
+
+# /nametags update
+# -----------------------------------------------------------------------------------------------------------------------------
+update-checker-not-ready: "&cThe update checker isn't ready yet — try again in a moment."
+update-checking: "&7Checking Modrinth for updates..."
+update-check-failed: "&cCould not check for updates: {reason}"
+update-available: "&eA new version is available: &av{version} &7(you're running &fv{current}&7). &f{url}"
+update-up-to-date: "&aYou're already running the latest version (v{current})."
+op-update-notice: "&e[CustomPlayerNametags] &fA new version is available: &av{version} &7(you're running v{current}). &f{url}"
+# -----------------------------------------------------------------------------------------------------------------------------
+
+
+# /nametags format view
+# ---------------------------------------------------------------------------
+format-view-global-unparsed-header: "&7Global unparsed format:"
+format-view-global-parsed-header: "&7Global parsed format (as &e{player}&7):"
+format-view-player-header: "&e{player}&7's {type} format:"
+# ---------------------------------------------------------------------------
+
+
+# /nametags format set
+# ---------------------------------------------------------------------
+format-set-global-success: "&aUpdated the global nametag format."
+format-set-player-success: "&aUpdated nametag format for &e{player}&a."
+# ---------------------------------------------------------------------
+
+
+# /nametags format reset
+# -----------------------------------------------------------------------------------------
+format-reset-global-success: "&aReset the global nametag format to the default."
+format-reset-player-success: "&aReset &e{player}&a's nametag format to the global format."
+# -----------------------------------------------------------------------------------------
+
+
+# Command usage messages
+# ----------------------------------------------------------------------------------------------------------------
+usage-top-level:
+  - "&cUsages:"
+  - "&f/{label} reload &e- Reload plugin."
+  - "&f/{label} update &e- Check plugin for updates."
+  - "&f/{label} format &e- Manage nametag formats."
+
+usage-format:
+  - "&cUsages:"
+  - "&f/{label} format view &6<&fglobal&6|&fplayer&6> &e- View nametag format."
+  - "&f/{label} format set &6<&fglobal&6|&fplayer&6> &e- Set nametag format."
+  - "&f/{label} format reset &6<&fglobal&6|&fplayer&6> &e- Reset nametag format."
+
+usage-format-view:
+  - "&cUsages:"
+  - "&f/{label} format view global unparsed &e- View the unparsed global nametag format."
+  - "&f/{label} format view global parsed &6<&fplayer&6> &e- View the global nametag format parsed for a player."
+  - "&f/{label} format view player &6<&funparsed&6|&fparsed&6> &6<&fplayer&6> &e- View a player's nametag format."
+
+usage-format-set:
+  - "&cUsages:"
+  - "&f/{label} format set global &6<&fformat&6> &e- Set the global nametag format."
+  - "&f/{label} format set player &6<&fplayer&6> &6<&fformat&6> &e- Set a player's nametag format."
+  - "&cUsages:"
+  - "&f/{label} format reset global &e- Reset the global nametag format to default."
+  - "&f/{label} format reset player &6<&fplayer&6> &e- Reset a player's nametag format."
+# ----------------------------------------------------------------------------------------------------------------
+# =============================================================================================================================

@@ -23,4 +23,4 @@
 
 ## Permissions
 
-- `customplayernametags.admin` — Allows reloading the plugin configuration (default: OP).
+- `customplayernametags.admin` — Allows use of all CustomPlayerNametags commands (default: OP).

@@ -3,6 +3,7 @@ package afx.customplayernametags;
 import com.github.retrooper.packetevents.PacketEvents;
 import afx.customplayernametags.command.NametagCommand;
 import afx.customplayernametags.config.ConfigManager;
+import afx.customplayernametags.config.MessageManager;
 import afx.customplayernametags.config.PlayerFormatStore;
 import afx.customplayernametags.listener.PlayerConnectionListener;
 import afx.customplayernametags.manager.NametagDisplayManager;
@@ -16,6 +17,7 @@ public final class CustomPlayerNametags extends JavaPlugin {
     private static CustomPlayerNametags instance;
 
     private ConfigManager configManager;
+    private MessageManager messageManager;
     private PlayerFormatStore playerFormatStore;
     private NametagManager nametagManager;
     private NametagDisplayManager displayManager;
@@ -39,6 +41,9 @@ public final class CustomPlayerNametags extends JavaPlugin {
         this.configManager = new ConfigManager(this);
         this.configManager.load();
 
+        this.messageManager = new MessageManager(this);
+        this.messageManager.load();
+
         this.playerFormatStore = new PlayerFormatStore(this);
         this.playerFormatStore.load();
 
@@ -48,11 +53,11 @@ public final class CustomPlayerNametags extends JavaPlugin {
         this.displayManager.setNametagManager(nametagManager);
 
         getServer().getPluginManager().registerEvents(
-                new PlayerConnectionListener(this, configManager, nametagManager), this);
+                new PlayerConnectionListener(this, configManager, nametagManager, messageManager), this);
 
         var nametagCmd = getCommand("nametags");
         if (nametagCmd != null) {
-            NametagCommand executor = new NametagCommand(this, configManager, nametagManager);
+            NametagCommand executor = new NametagCommand(this, configManager, nametagManager, messageManager);
             nametagCmd.setExecutor(executor);
             nametagCmd.setTabCompleter(executor);
         }
@@ -104,6 +109,10 @@ public final class CustomPlayerNametags extends JavaPlugin {
 
     public ConfigManager getConfigManager() {
         return configManager;
+    }
+
+    public MessageManager getMessageManager() {
+        return messageManager;
     }
 
     public PlayerFormatStore getPlayerFormatStore() {

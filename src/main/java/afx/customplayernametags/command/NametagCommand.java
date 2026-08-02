@@ -2,10 +2,10 @@ package afx.customplayernametags.command;
 
 import afx.customplayernametags.CustomPlayerNametags;
 import afx.customplayernametags.config.ConfigManager;
+import afx.customplayernametags.config.MessageManager;
 import afx.customplayernametags.manager.NametagDisplayManager;
 import afx.customplayernametags.manager.NametagManager;
 import afx.customplayernametags.update.UpdateChecker;
-import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -19,23 +19,17 @@ import java.util.List;
 
 public final class NametagCommand implements CommandExecutor, TabCompleter {
 
-    private static final String NO_PERMISSION = ChatColor.translateAlternateColorCodes('&',
-            "&cYou do not have permission to do that.");
-    private static final String RELOAD_SUCCESS = ChatColor.translateAlternateColorCodes('&',
-            "&aCustomPlayerNametags reloaded.");
-    private static final String PLAYER_NOT_FOUND = ChatColor.translateAlternateColorCodes('&',
-            "&cThat player isn't online.");
-    private static final String CONSOLE_ONLY = ChatColor.translateAlternateColorCodes('&',
-            "&cThat subcommand is console-only.");
-
     private final CustomPlayerNametags plugin;
     private final ConfigManager config;
     private final NametagManager nametagManager;
+    private final MessageManager messages;
 
-    public NametagCommand(CustomPlayerNametags plugin, ConfigManager config, NametagManager nametagManager) {
+    public NametagCommand(CustomPlayerNametags plugin, ConfigManager config, NametagManager nametagManager,
+                          MessageManager messages) {
         this.plugin = plugin;
         this.config = config;
         this.nametagManager = nametagManager;
+        this.messages = messages;
     }
 
     @Override
@@ -48,19 +42,18 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         // AUTO/MANUAL mode dismounts use — there's no longer a way to override it.
         if (args.length >= 1 && args[0].equalsIgnoreCase("dismount")) {
             if (!(sender instanceof ConsoleCommandSender)) {
-                sender.sendMessage(CONSOLE_ONLY);
+                messages.send(sender, "console-only");
                 return true;
             }
 
             if (args.length != 2) {
-                sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        "&cUsage: /" + label + " dismount <player>"));
+                messages.send(sender, "dismount-usage", "{label}", label);
                 return true;
             }
 
             Player target = Bukkit.getPlayerExact(args[1]);
             if (target == null) {
-                sender.sendMessage(PLAYER_NOT_FOUND);
+                messages.send(sender, "player-not-found");
                 return true;
             }
 
@@ -72,27 +65,27 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         }
 
         if (!sender.hasPermission("nametag.admin")) {
-            sender.sendMessage(NO_PERMISSION);
+            messages.send(sender, "no-permission");
             return true;
         }
 
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
             config.load();
+            messages.load();
             nametagManager.stopRefreshTask();
             nametagManager.startRefreshTask();
             nametagManager.refreshAll();
-            sender.sendMessage(RELOAD_SUCCESS);
+            messages.send(sender, "reload-success");
             return true;
         }
 
         if (args.length == 1 && args[0].equalsIgnoreCase("update")) {
             UpdateChecker updateChecker = plugin.getUpdateChecker();
             if (updateChecker == null) {
-                sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        "&cThe update checker isn't ready yet — try again in a moment."));
+                messages.send(sender, "update-checker-not-ready");
                 return true;
             }
-            sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7Checking Modrinth for updates..."));
+            messages.send(sender, "update-checking");
             // Always a fresh network check (unlike the cached result used for
             // the OP-join notice) — this is an explicit "check now" request.
             updateChecker.check(result -> sendUpdateCheckResult(sender, result));
@@ -103,16 +96,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             return handleFormatCommand(sender, label, args);
         }
 
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cUsages:"));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " reload &e- Reload plugin."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " update &e- Check plugin for updates."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format view global unparsed &e- View the raw global nametag format."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format view global parsed <player> &e- View the global nametag format parsed for a player."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format view player <unparsed|parsed> <player> &e- View a player's nametag format."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format set global \"<format>\" &e- Set the global nametag format."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format set player <player> \"<format>\" &e- Set a player's nametag format."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format reset global &e- Reset the global nametag format to default."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format reset player <player> &e- Reset a player's nametag format."));
+        messages.sendList(sender, "usage-top-level", "{label}", label);
         return true;
     }
 
@@ -151,9 +135,9 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
      * </ul>
      */
     private boolean handleFormatCommand(CommandSender sender, String label, String[] args) {
-        if (args.length >= 3 && args[1].equalsIgnoreCase("view")) {
+        if (args.length >= 2 && args[1].equalsIgnoreCase("view")) {
             if (args.length == 4 && args[2].equalsIgnoreCase("global") && args[3].equalsIgnoreCase("unparsed")) {
-                sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&7Global unparsed format:"));
+                messages.send(sender, "format-view-global-unparsed-header");
                 sender.sendMessage(nametagManager.getGlobalRawFormat());
                 return true;
             }
@@ -163,12 +147,11 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                 // resolve player-only placeholders otherwise.
                 Player target = Bukkit.getPlayerExact(args[4]);
                 if (target == null) {
-                    sender.sendMessage(PLAYER_NOT_FOUND);
+                    messages.send(sender, "player-not-found");
                     return true;
                 }
 
-                sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        "&7Global parsed format (as &e" + target.getName() + "&7):"));
+                messages.send(sender, "format-view-global-parsed-header", "{player}", target.getName());
                 sender.sendMessage(nametagManager.getGlobalParsedFormat(target));
                 return true;
             }
@@ -179,7 +162,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
 
                 Player target = Bukkit.getPlayerExact(args[4]);
                 if (target == null) {
-                    sender.sendMessage(PLAYER_NOT_FOUND);
+                    messages.send(sender, "player-not-found");
                     return true;
                 }
 
@@ -187,8 +170,9 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                         ? nametagManager.getEffectiveParsedFormat(target)
                         : nametagManager.getEffectiveRawFormat(target);
 
-                sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        "&e" + target.getName() + "&7's " + (parsed ? "parsed" : "unparsed") + " format:"));
+                messages.send(sender, "format-view-player-header",
+                        "{player}", target.getName(),
+                        "{type}", parsed ? "parsed" : "unparsed");
                 // The "unparsed" value is stored with literal '&' codes and unresolved
                 // placeholders, so sending it as-is shows it exactly as stored. The
                 // "parsed" value already has '&' codes translated to real color codes
@@ -197,95 +181,98 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(value);
                 return true;
             }
+
+            // "format view" was used, but with an unrecognized target/mode
+            // combination — show just the "format view" usages, not every
+            // "format" usage.
+            messages.sendList(sender, "usage-format-view", "{label}", label);
+            return true;
         }
 
-        if (args.length >= 3 && args[1].equalsIgnoreCase("set")) {
-            if (args[2].equalsIgnoreCase("global")) {
+        if (args.length >= 2 && args[1].equalsIgnoreCase("set")) {
+            if (args.length >= 3 && args[2].equalsIgnoreCase("global")) {
                 String newFormat = joinAndUnquote(args, 3);
                 if (newFormat.isEmpty()) {
-                    sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                            "&cUsage: /" + label + " format set global \"<format>\""));
+                    messages.sendList(sender, "usage-format-set", "{label}", label);
                     return true;
                 }
 
                 config.setGlobalFormat(newFormat);
                 nametagManager.refreshAll();
-                sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        "&aUpdated the global nametag format."));
+                messages.send(sender, "format-set-global-success");
                 return true;
             }
 
-            if (args.length >= 5 && args[2].equalsIgnoreCase("player")) {
+            if (args.length >= 4 && args[2].equalsIgnoreCase("player")) {
                 Player target = Bukkit.getPlayerExact(args[3]);
                 if (target == null) {
-                    sender.sendMessage(PLAYER_NOT_FOUND);
+                    messages.send(sender, "player-not-found");
                     return true;
                 }
 
                 String newFormat = joinAndUnquote(args, 4);
                 if (newFormat.isEmpty()) {
-                    sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                            "&cUsage: /" + label + " format set player <player> \"<format>\""));
+                    messages.sendList(sender, "usage-format-set", "{label}", label);
                     return true;
                 }
 
                 nametagManager.setFormatOverride(target.getUniqueId(), newFormat);
-                sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        "&aUpdated nametag format for &e" + target.getName() + "&a."));
+                messages.send(sender, "format-set-player-success", "{player}", target.getName());
                 return true;
             }
+
+            // "format set" was used, but with an unrecognized target — show
+            // just the "format set" usages.
+            messages.sendList(sender, "usage-format-set", "{label}", label);
+            return true;
         }
 
-        if (args.length >= 3 && args[1].equalsIgnoreCase("reset")) {
+        if (args.length >= 2 && args[1].equalsIgnoreCase("reset")) {
             if (args.length == 3 && args[2].equalsIgnoreCase("global")) {
                 config.resetGlobalFormat();
                 nametagManager.refreshAll();
-                sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        "&aReset the global nametag format to the default."));
+                messages.send(sender, "format-reset-global-success");
                 return true;
             }
 
             if (args.length == 4 && args[2].equalsIgnoreCase("player")) {
                 Player target = Bukkit.getPlayerExact(args[3]);
                 if (target == null) {
-                    sender.sendMessage(PLAYER_NOT_FOUND);
+                    messages.send(sender, "player-not-found");
                     return true;
                 }
 
                 nametagManager.resetFormatOverride(target.getUniqueId());
-                sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                        "&aReset &e" + target.getName() + "&a's nametag format to the global format."));
+                messages.send(sender, "format-reset-player-success", "{player}", target.getName());
                 return true;
             }
+
+            // "format reset" was used, but with an unrecognized target —
+            // show just the "format reset" usages.
+            messages.sendList(sender, "usage-format-reset", "{label}", label);
+            return true;
         }
 
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&cUsages:"));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format view global unparsed &e- View the raw global nametag format."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format view global parsed <player> &e- View the global nametag format parsed for a player."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format view player <unparsed|parsed> <player> &e- View a player's nametag format."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format set global \"<format>\" &e- Set the global nametag format."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format set player <player> \"<format>\" &e- Set a player's nametag format."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format reset global &e- Reset the global nametag format."));
-        sender.sendMessage(ChatColor.translateAlternateColorCodes('&', "&f/" + label + " format reset player <player> &e- Reset a player's nametag format."));
+        // "format" was used, but with an unrecognized (or missing)
+        // subcommand — show just the "format" usages (view/set/reset),
+        // not every leaf command underneath them.
+        messages.sendList(sender, "usage-format", "{label}", label);
         return true;
     }
 
     /** Reports the outcome of an {@link UpdateChecker} run to whoever ran {@code /nametags update}. */
     private void sendUpdateCheckResult(CommandSender sender, UpdateChecker.Result result) {
         if (!result.isSuccess()) {
-            sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    "&cCould not check for updates: " + result.getFailureReason()));
+            messages.send(sender, "update-check-failed", "{reason}", result.getFailureReason());
             return;
         }
         if (result.isUpdateAvailable()) {
-            sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    "&eA new version is available: &av" + result.getLatestVersion()
-                            + " &7(you're running &fv" + plugin.getDescription().getVersion() + "&7). &f"
-                            + result.getReleaseUrl()));
+            messages.send(sender, "update-available",
+                    "{version}", result.getLatestVersion(),
+                    "{current}", plugin.getDescription().getVersion(),
+                    "{url}", result.getReleaseUrl());
         } else {
-            sender.sendMessage(ChatColor.translateAlternateColorCodes('&',
-                    "&aYou're already running the latest version (v"
-                            + plugin.getDescription().getVersion() + ")."));
+            messages.send(sender, "update-up-to-date", "{current}", plugin.getDescription().getVersion());
         }
     }
 
