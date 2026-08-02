@@ -124,10 +124,11 @@ public final class PlayerConnectionListener implements Listener {
      *       a configured {@code "mv tp"} entry matches {@code "/mv tp world"}).</li>
      * </ul>
      *
-     * <p>In every mode the dismount duration is fixed at 1 tick, and the
-     * nametag automatically remounts after it expires. None of this affects
-     * the console-only {@code /nametags dismount <player>} command, which
-     * always works.
+     * <p>In every mode the dismount duration is {@code dismount-duration-ticks}
+     * from config.yml, and the nametag automatically remounts after it
+     * expires (or immediately on an actual world change, whichever comes
+     * first). None of this affects the console-only
+     * {@code /nametags dismount <player>} command, which always works.
      */
     @EventHandler(priority = EventPriority.LOWEST)
     public void onCommand(PlayerCommandPreprocessEvent event) {
@@ -154,6 +155,31 @@ public final class PlayerConnectionListener implements Listener {
 
         UUID uuid = event.getPlayer().getUniqueId();
         displayManager.dismount(uuid, config.getDismountDurationTicks());
+    }
+
+    /**
+     * Dismounts a player's nametag before any teleport is actually carried
+     * out, not just ones triggered by a typed command. {@link #onCommand}
+     * only sees {@code PlayerCommandPreprocessEvent}, so it never fires for
+     * nether/end portals or for other plugins calling
+     * {@code Player#teleport(...)} directly via the API — in both cases the
+     * nametag's passenger entity is still attached when Bukkit processes
+     * the teleport, and a stale passenger reference is enough to silently
+     * block a cross-world move. Handling {@link PlayerTeleportEvent} here
+     * (regardless of cause) closes that gap the same way {@code onCommand}
+     * does for commands. Uses {@code EventPriority.LOWEST} so this runs
+     * before other plugins react to the event.
+     */
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onTeleport(PlayerTeleportEvent event) {
+        NametagDisplayManager displayManager = nametagManager.getDisplayManager();
+        if (displayManager == null) {
+            return;
+        }
+        if (config.getNametagDismountMode() == ConfigManager.DismountMode.NONE) {
+            return;
+        }
+        displayManager.dismount(event.getPlayer().getUniqueId(), config.getDismountDurationTicks());
     }
 
     /**

@@ -38,8 +38,8 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         // nametag-dismount-mode is set to (including NONE), since it's a manual
         // override rather than the automatic per-command dismounting.
         // Usage: /nametags dismount <player>
-        // Always uses dismount-duration-ticks (fixed at 1 tick), same value
-        // AUTO/MANUAL mode dismounts use — there's no longer a way to override it.
+        // Always uses dismount-duration-ticks from config.yml, same value
+        // AUTO/MANUAL mode dismounts use — there's no per-invocation override.
         if (args.length >= 1 && args[0].equalsIgnoreCase("dismount")) {
             if (!(sender instanceof ConsoleCommandSender)) {
                 messages.send(sender, "console-only");

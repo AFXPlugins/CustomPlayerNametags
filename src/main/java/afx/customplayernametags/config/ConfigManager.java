@@ -20,6 +20,15 @@ public final class ConfigManager {
     private static final double BEDROCK_HEIGHT_ADJUST = -0.155;
     /** Extra height for Bedrock/Geyser viewers while sneaking. */
     private static final double BEDROCK_SNEAK_HEIGHT_ADJUST = 0.25;
+    /**
+     * Extra height for Bedrock/Geyser viewers only, applied for the brief
+     * window a tag is dismounted/remounted around a command (see
+     * {@link #getBedrockDismountHeightAdjust()}). Found empirically on a
+     * real Bedrock client — Geyser's own passenger-mount math for display
+     * entities isn't publicly documented, so this can't be derived
+     * analytically the way the Java-side offset can.
+     */
+    private static final double BEDROCK_DISMOUNT_HEIGHT_ADJUST = 0.15;
 
     /**
      * Controls when the plugin automatically dismounts a player's nametag
@@ -53,17 +62,23 @@ public final class ConfigManager {
     private final CustomPlayerNametags plugin;
 
     /**
-     * How long (in ticks) a player's nametag stays dismounted after a
-     * triggering command, and the value the console-only
-     * {@code /nametags dismount <player>} command always uses. No longer
-     * configurable via config.yml — fixed at 1 tick.
+     * Fallback used for {@code dismount-duration-ticks} if it's missing or
+     * invalid in config.yml. 10 ticks (0.5s) gives teleports that don't
+     * complete synchronously — e.g. cross-dimension moves that need to load
+     * chunks or run a safe-spot search — enough of a buffer to actually
+     * finish before the nametag remounts and blocks them again. This is
+     * just a ceiling: {@link afx.customplayernametags.listener.PlayerConnectionListener#onWorldChange}
+     * already closes the dismount window immediately once a world change
+     * actually happens, so a generous value here doesn't mean the tag stays
+     * visibly detached any longer for teleports that complete quickly.
      */
-    private static final long DISMOUNT_DURATION_TICKS = 1L;
+    private static final long DEFAULT_DISMOUNT_DURATION_TICKS = 10L;
 
     private String nametagFormat;
     private double nametagRenderDistance;
     private DismountMode nametagDismountMode;
     private List<List<String>> dismountCommands;
+    private long dismountDurationTicks;
 
     public ConfigManager(CustomPlayerNametags plugin) {
         this.plugin = plugin;
@@ -80,6 +95,9 @@ public final class ConfigManager {
         this.nametagRenderDistance = cfg.getDouble("nametag-render-distance", 64.0);
 
         this.nametagDismountMode = DismountMode.parse(cfg.getString("nametag-dismount-mode", "AUTO"));
+
+        long configuredTicks = cfg.getLong("dismount-duration-ticks", DEFAULT_DISMOUNT_DURATION_TICKS);
+        this.dismountDurationTicks = configuredTicks > 0 ? configuredTicks : DEFAULT_DISMOUNT_DURATION_TICKS;
 
         List<List<String>> commands = new ArrayList<>();
         for (String raw : cfg.getStringList("dismount-commands")) {
@@ -197,6 +215,31 @@ public final class ConfigManager {
     }
 
     /**
+     * Extra height (in blocks) added to a Bedrock/Geyser viewer's copy of
+     * the tag specifically for the brief window while it's dismounted
+     * (mid-command — see {@link afx.customplayernametags.manager.NametagDisplayManager#dismount}),
+     * on top of the same fixed reference point Java viewers use for that
+     * window.
+     *
+     * <p>This exists for a different reason than {@link #getBedrockHeightAdjust()}.
+     * That one corrects the tag's height while continuously mounted, and is
+     * already tuned against a real Bedrock client. This one corrects a
+     * separate, unrelated number: the fixed reference height used only for
+     * the instant the tag is un-mounted and re-mounted around a command.
+     * That reference point is calibrated against vanilla Java's own
+     * passenger-mounting math, which is public and predictable. Geyser has
+     * to reimplement passenger mounting for Bedrock on its own — display
+     * entities don't exist natively on Bedrock — and there's no public spec
+     * for exactly what height Geyser's translation lands on, so there was
+     * no way to compute the right value analytically the way the Java side
+     * could be; {@link #BEDROCK_DISMOUNT_HEIGHT_ADJUST} was instead found
+     * empirically by testing on a real Bedrock client.
+     */
+    public double getBedrockDismountHeightAdjust() {
+        return BEDROCK_DISMOUNT_HEIGHT_ADJUST;
+    }
+
+    /**
      * Maximum distance (in blocks) from a viewer at which their custom
      * TextDisplay nametag is shown at all, matching vanilla's own fixed
      * client-side nametag render cutoff (64 blocks) rather than whatever
@@ -209,14 +252,15 @@ public final class ConfigManager {
 
     /**
      * How long (in ticks) a player's nametag should remain dismounted after
-     * a triggering command. Fixed at 1 tick — no longer configurable via
-     * config.yml. Also used as the duration for every entry in
-     * {@code dismount-commands}, and for the console-only
-     * {@code /nametags dismount <player>} command. The player's nametag will
-     * automatically remount after this duration.
+     * a triggering command or teleport. Configured via
+     * {@code dismount-duration-ticks} in config.yml (default 10). Also used
+     * as the duration for every entry in {@code dismount-commands}, and for
+     * the console-only {@code /nametags dismount <player>} command. The
+     * player's nametag will automatically remount after this duration, or
+     * immediately on an actual world change, whichever comes first.
      */
     public long getDismountDurationTicks() {
-        return DISMOUNT_DURATION_TICKS;
+        return dismountDurationTicks;
     }
 
     /**

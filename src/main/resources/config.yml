@@ -74,6 +74,12 @@ nametag-dismount-mode: AUTO
 dismount-commands:
   - examplecommand1
   - examplecommand2
+
+# How long (in ticks) the nametag stays dismounted.
+# The nametag remounts immediately after the player changes worlds.
+# Only change if there are issues with cross-world teleport commands.
+# Default: 2
+dismount-duration-ticks: 2
 # ==============================================================================
 
 

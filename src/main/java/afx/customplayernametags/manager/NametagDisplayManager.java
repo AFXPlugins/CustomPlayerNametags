@@ -154,11 +154,14 @@ public final class NametagDisplayManager {
      * subtracted in {@link #buildTransformation} and then (approximately)
      * re-added by the client's own real attach point, so any small error in
      * this constant mostly cancels out against that real (but API-invisible)
-     * attach point and was never noticeable. This constant is only ever used
-     * while actually mounted; a dismounted display is positioned entirely
-     * from the player's live eye location instead (see {@link
-     * #dismountedRenderLocation}), which needs no approximation of the
-     * attach point at all.
+     * attach point and was never noticeable while continuously mounted.
+     * This constant is only ever used while actually mounted; a dismounted
+     * display is positioned via {@link #dismountedRenderLocation} instead,
+     * which deliberately reuses the exact same {@link #heightAboveFeet}
+     * formula as {@link #buildTransformation} (just measured from the
+     * player's feet instead of folded into a passenger-local offset) so the
+     * two rendering paths can never disagree with each other at the instant
+     * of a dismount/remount, regardless of how accurate this constant is.
      */
     private static final double ASSUMED_MOUNT_OFFSET = 1.8;
 
@@ -203,16 +206,34 @@ public final class NametagDisplayManager {
     private static final Vector3f UNIT_SCALE = new Vector3f(1f, 1f, 1f);
 
     /**
-     * Zero-translation {@link Transformation}, applied to a display while it
-     * is dismounted (see {@link #dismountOne}). While dismounted, the
-     * display's on-screen height is driven entirely by the teleport target
-     * in {@link #dismountedRenderLocation}, which already bakes in the
-     * correct pose-aware height above the player's eyes — so the
-     * Transformation itself must contribute nothing extra, or the height
-     * would be double-counted.
+     * Deliberately <b>not</b> touching the display's {@link Transformation}
+     * on dismount/remount was a late fix — see {@link #dismountOne} and
+     * {@link #dismountedRenderLocation} for why. An earlier version zeroed
+     * the Transformation while dismounted (reasoning: the absolute teleport
+     * target already bakes in the full height, so the per-pose translation
+     * would double-count if left in place) and restored the real one on
+     * remount. That was correct in principle but wrong in practice: the
+     * Transformation is entity metadata, sent to the client as a separate
+     * packet from the Set Passengers (mount/unmount) packet, and Minecraft
+     * gives no guarantee the two land in the same client render frame. That
+     * left a real window — sometimes a frame, sometimes longer under load —
+     * where the client had received one change but not the other: e.g.
+     * "already re-mounted" + "still zeroed Transformation" (tag snaps to
+     * the vehicle's bare attach point, too low — the Bedrock "pops down")
+     * or "already restored Transformation" + "not yet re-mounted"
+     * (translation applied on top of the already-full absolute height, too
+     * high, then corrected the instant the mount packet lands — the Java
+     * "pops up and back down"). Every command a player ran flipped both of
+     * these at least once, which is exactly this class's old popping.
+     *
+     * <p>The fix is to never change the Transformation for a dismount at
+     * all — {@link #dismountedRenderLocation} is calibrated (via
+     * {@link #ASSUMED_MOUNT_OFFSET}) so that "absolute position + whatever
+     * Transformation is already on the entity" comes out to the exact same
+     * on-screen height whether or not the entity happens to be mounted at
+     * that instant. With nothing left to race, there's no packet-ordering
+     * window left for a pop to hide in.
      */
-    private static final Transformation FLAT_TRANSFORMATION = new Transformation(
-            new Vector3f(0f, 0f, 0f), IDENTITY_ROTATION, UNIT_SCALE, IDENTITY_ROTATION);
 
     /**
      * Fully opaque text. Use 255 (not the API's -1 sentinel) so Geyser/Bedrock
@@ -466,11 +487,11 @@ public final class NametagDisplayManager {
         // race so the dismount is guaranteed to have actually taken effect
         // by the time this method returns.
         Player owner = Bukkit.getPlayer(uuid);
-        dismountOne(owner, pair.javaDisplay);
-        dismountOne(owner, pair.bedrockDisplay);
+        dismountOne(owner, pair.javaDisplay, false);
+        dismountOne(owner, pair.bedrockDisplay, true);
     }
 
-    private void dismountOne(Player owner, TextDisplay display) {
+    private void dismountOne(Player owner, TextDisplay display, boolean forBedrockViewer) {
         if (display == null || !display.isValid()) {
             return;
         }
@@ -492,42 +513,44 @@ public final class NametagDisplayManager {
         // doesn't just hold still at the player's current spot, it snaps
         // to wherever it was left behind.
         //
-        // Rather than approximating the invisible client-side passenger
-        // attach point with a fixed guessed constant (an earlier version
-        // teleported to owner.getLocation() — the player's FEET — plus a
-        // hand-tuned offset meant to reproduce that attach point), this
-        // teleports straight to dismountedRenderLocation(), which is
-        // computed from the player's own live, pose-correct eye location.
-        // That removes the guesswork entirely, so there's no residual gap
-        // left to show up as a visible jump the instant a command dismounts
-        // the tag. The Transformation is flattened to zero at the same time
-        // so the teleport target is the single source of truth for height —
-        // see tickMaintain()/updateDismountedPosition() for how this stays
-        // correct every tick for as long as the dismount window lasts, and
-        // restoreMountedTransformation() for how the real Transformation
-        // comes back once it remounts.
+        // Deliberately does NOT touch the display's Transformation here —
+        // see the field javadoc above (formerly FLAT_TRANSFORMATION) for
+        // why that used to cause the up/down popping on every command.
+        // dismountedRenderLocation() is calibrated so that teleporting here
+        // reproduces the exact same on-screen spot the tag was already
+        // sitting at the instant before, using whatever Transformation
+        // happens to already be on the entity — mounted or not.
         if (owner != null) {
-            display.setInterpolationDelay(0);
-            display.setInterpolationDuration(0);
-            display.setTransformation(FLAT_TRANSFORMATION);
-            display.teleport(dismountedRenderLocation(owner));
+            display.teleport(dismountedRenderLocation(owner, forBedrockViewer));
         }
     }
 
     /**
      * Where a dismounted (temporarily un-passengered) display should render,
-     * computed directly from the player's own live {@link
-     * Player#getEyeLocation()} rather than a fixed approximation of the
-     * invisible client-side passenger attach point. {@code getEyeLocation()}
-     * is already pose-correct — it shrinks on its own while sneaking — so
-     * this stays accurate even if the player's pose changes mid-dismount,
-     * which the old fixed feet-based teleport had no way to react to since
-     * the sneak-triggered Transformation update in tickMaintain() is itself
-     * skipped for the whole dismount window (see tickMaintain()).
+     * expressed in absolute world coordinates.
+     *
+     * <p>For the Java display, this is just {@link #ASSUMED_MOUNT_OFFSET}
+     * above the owner's feet — see the field javadoc above for why that
+     * cancels out against whatever {@link Transformation} is already on the
+     * entity, mounted or not, regardless of sneak state.
+     *
+     * <p>The Bedrock display adds {@link ConfigManager#getBedrockDismountHeightAdjust()}
+     * on top of that same reference point. Java's passenger-mount math is
+     * public and predictable, which is why one shared constant works for
+     * it. Geyser has to reimplement passenger mounting for Bedrock from
+     * scratch (display entities don't exist natively there), and there's no
+     * public spec for exactly what height its translation lands on — so
+     * unlike the Java side, this can't be derived analytically. That's what
+     * the config option is for: an admin-tunable correction found by
+     * testing on a real Bedrock client, the same way {@link
+     * ConfigManager#getBedrockHeightAdjust()} already is for continuous
+     * mounted rendering. Defaults to {@code 0.0} (behaves identically to
+     * Java) until tuned.
      */
-    private Location dismountedRenderLocation(Player owner) {
-        double aboveEyes = config.getNametagHeightOffset() - STANDING_EYE_HEIGHT;
-        return owner.getEyeLocation().add(0.0, aboveEyes, 0.0);
+    private Location dismountedRenderLocation(Player owner, boolean forBedrockViewer) {
+        double offset = ASSUMED_MOUNT_OFFSET
+                + (forBedrockViewer ? config.getBedrockDismountHeightAdjust() : 0.0);
+        return owner.getLocation().add(0.0, offset, 0.0);
     }
 
     /**
@@ -535,40 +558,20 @@ public final class NametagDisplayManager {
      * #dismountedRenderLocation} every tick the dismount window is still
      * active (called from {@link #tickMaintain}). Without this, a command
      * dismount placed the tag once and then left it completely frozen in
-     * place for the rest of dismount-duration-ticks (fixed at 1 tick) — so
+     * place for the rest of dismount-duration-ticks — so
      * a player who moved at all while a command was
      * processing saw their own tag get left behind in midair, then visibly
      * snap back into place the instant it remounted. Continuously tracking
-     * the player's live eye location here keeps the tag glued to them the
+     * the player's live position here keeps the tag glued to them the
      * entire time instead, exactly as if it were still mounted.
      */
     private void updateDismountedPosition(Player owner, DisplayPair pair) {
-        Location target = dismountedRenderLocation(owner);
         if (pair.javaDisplay.isValid()) {
-            pair.javaDisplay.teleport(target);
+            pair.javaDisplay.teleport(dismountedRenderLocation(owner, false));
         }
         if (pair.bedrockDisplay.isValid()) {
-            pair.bedrockDisplay.teleport(target);
+            pair.bedrockDisplay.teleport(dismountedRenderLocation(owner, true));
         }
-    }
-
-    /**
-     * Restores the real passenger {@link Transformation} on both displays
-     * once a dismount window has just expired, undoing the {@link
-     * #FLAT_TRANSFORMATION} that {@link #dismountOne} applied. Called
-     * before {@link #ensureMounted} re-attaches the passenger so the tag
-     * never renders — even for a single frame — with a flattened
-     * Transformation while actually mounted, which would otherwise show up
-     * as a jump down to the player's feet right as the tag remounts.
-     */
-    private void restoreMountedTransformation(Player owner, DisplayPair pair) {
-        boolean sneaking = owner.isSneaking();
-        pair.javaDisplay.setInterpolationDelay(0);
-        pair.javaDisplay.setInterpolationDuration(0);
-        pair.javaDisplay.setTransformation(buildTransformation(sneaking, false));
-        pair.bedrockDisplay.setInterpolationDelay(0);
-        pair.bedrockDisplay.setInterpolationDuration(0);
-        pair.bedrockDisplay.setTransformation(buildTransformation(sneaking, true));
     }
 
     public void remove(UUID uuid) {
@@ -1140,11 +1143,11 @@ public final class NametagDisplayManager {
                     continue;
                 }
                 dismountUntilTick.remove(uuid);
-                // The window just closed — restore the real Transformation
-                // now, before ensureMounted() re-attaches the passenger
-                // below, so the tag never renders even one frame mounted
-                // with the flattened dismount Transformation still active.
-                restoreMountedTransformation(player, pair);
+                // The window just closed. Nothing to restore here anymore —
+                // dismountOne() never touched this pair's Transformation in
+                // the first place (see its javadoc), so ensureMounted() below
+                // can re-attach the passenger directly with no separate
+                // "restore" packet that would need to land in sync with it.
             }
 
             if (!ensureMounted(player, pair)) {
@@ -1191,6 +1194,33 @@ public final class NametagDisplayManager {
     }
 
     /**
+     * The intended height above the player's feet for the tag, for one
+     * viewer platform and pose — every adjustment that ever affects the
+     * tag's on-screen height lives here, and both {@link #buildTransformation}
+     * (mounted rendering) and {@link #dismountedRenderLocation} (dismounted
+     * rendering) are built directly on top of it. That shared origin is
+     * what guarantees the two rendering paths can never drift apart: there
+     * is only one formula for "how high should this tag be", not two
+     * similar-but-not-quite-identical ones.
+     */
+    private double heightAboveFeet(boolean sneaking, boolean forBedrockViewer) {
+        double aboveEyes = config.getNametagHeightOffset() - STANDING_EYE_HEIGHT;
+        double eye = sneaking ? SNEAK_EYE_HEIGHT : STANDING_EYE_HEIGHT;
+        double desiredFromFeet = eye + aboveEyes;
+        double height = desiredFromFeet;
+        if (sneaking) {
+            height += config.getSneakHeightAdjust();
+        }
+        if (forBedrockViewer) {
+            height += config.getBedrockHeightAdjust();
+            if (sneaking) {
+                height += config.getBedrockSneakHeightAdjust();
+            }
+        }
+        return height;
+    }
+
+    /**
      * Builds the local offset that, once the display is riding the player
      * as a passenger, puts the tag at the configured height above the
      * player's head for their current pose, from the perspective of one
@@ -1220,19 +1250,7 @@ public final class NametagDisplayManager {
      * which platform the owner themselves is on.
      */
     private Transformation buildTransformation(boolean sneaking, boolean forBedrockViewer) {
-        double aboveEyes = config.getNametagHeightOffset() - STANDING_EYE_HEIGHT;
-        double eye = sneaking ? SNEAK_EYE_HEIGHT : STANDING_EYE_HEIGHT;
-        double desiredFromFeet = eye + aboveEyes;
-        double translationY = desiredFromFeet - ASSUMED_MOUNT_OFFSET;
-        if (sneaking) {
-            translationY += config.getSneakHeightAdjust();
-        }
-        if (forBedrockViewer) {
-            translationY += config.getBedrockHeightAdjust();
-            if (sneaking) {
-                translationY += config.getBedrockSneakHeightAdjust();
-            }
-        }
+        double translationY = heightAboveFeet(sneaking, forBedrockViewer) - ASSUMED_MOUNT_OFFSET;
         return new Transformation(
                 new Vector3f(0f, (float) translationY, 0f),
                 IDENTITY_ROTATION,
