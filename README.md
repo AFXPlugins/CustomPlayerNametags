@@ -16,13 +16,10 @@
 
 - `/nametags reload` — Reload plugin.
 - `/nametags update` — Check plugin for updates.
-- `/nametags format view <unparsed|parsed> global` — View the global nametag format.
-- `/nametags format view <unparsed|parsed> player <player>` — View a player's nametag format.
-- `/nametags format set global "<format>"` — Set the global nametag format.
-- `/nametags format set player <player> "<format>"` — Set a player's nametag format.
-- `/nametags format reset global` — Reset the global nametag format to default.
-- `/nametags format reset player <player>` — Reset a player's nametag format.
-
+- `/nametags format view`* — View nametag format.
+- `/nametags format set`* — Set nametag format.
+- `/nametags format reset`* — Reset nametag format.
+> *Only basic command usage is shown. Additional arguments are available in-game.
 ## Permissions
 
 - `customplayernametags.admin` — Allows reloading the plugin configuration (default: OP).
