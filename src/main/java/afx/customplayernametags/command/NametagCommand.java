@@ -64,7 +64,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        if (!sender.hasPermission("nametag.admin")) {
+        if (!sender.hasPermission("customplayernametags.admin")) {
             messages.send(sender, "no-permission");
             return true;
         }
@@ -302,7 +302,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> completions = new ArrayList<>();
 
-        boolean isAdmin = sender.hasPermission("nametag.admin");
+        boolean isAdmin = sender.hasPermission("customplayernametags.admin");
 
         if (args.length == 1) {
             if (isAdmin) {
