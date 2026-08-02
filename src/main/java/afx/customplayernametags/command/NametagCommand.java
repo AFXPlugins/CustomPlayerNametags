@@ -37,16 +37,16 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         // "dismount" is console-only, unconditionally — it works no matter what
         // nametag-dismount-mode is set to (including NONE), since it's a manual
         // override rather than the automatic per-command dismounting.
-        // Usage: /nametags dismount <player>
-        // Always uses dismount-duration-ticks from config.yml, same value
-        // AUTO/MANUAL mode dismounts use — there's no per-invocation override.
+        // Usage: /nametags dismount <player> [ticks]
+        // The <ticks> argument is optional — if omitted, dismount-duration-ticks
+        // from config.yml is used instead, same value AUTO/MANUAL mode dismounts use.
         if (args.length >= 1 && args[0].equalsIgnoreCase("dismount")) {
             if (!(sender instanceof ConsoleCommandSender)) {
                 messages.send(sender, "console-only");
                 return true;
             }
 
-            if (args.length != 2) {
+            if (args.length != 2 && args.length != 3) {
                 messages.send(sender, "dismount-usage", "{label}", label);
                 return true;
             }
@@ -57,9 +57,25 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
 
+            long durationTicks;
+            if (args.length == 3) {
+                try {
+                    durationTicks = Long.parseLong(args[2]);
+                    if (durationTicks < 0) {
+                        durationTicks = 0;
+                    }
+                } catch (NumberFormatException e) {
+                    messages.send(sender, "dismount-invalid-ticks", "{ticks}", args[2]);
+                    return true;
+                }
+            } else {
+                // No ticks given — fall back to the configured default duration.
+                durationTicks = config.getDismountDurationTicks();
+            }
+
             NametagDisplayManager displayManager = nametagManager.getDisplayManager();
             if (displayManager != null) {
-                displayManager.dismount(target.getUniqueId(), config.getDismountDurationTicks());
+                displayManager.dismount(target.getUniqueId(), durationTicks);
             }
             return true;
         }
@@ -318,6 +334,10 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             for (Player online : Bukkit.getOnlinePlayers()) {
                 completions.add(online.getName());
             }
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("dismount") && sender instanceof ConsoleCommandSender) {
+            // Suggest the configured default so it's obvious what omitting this
+            // arg falls back to (dismount-duration-ticks from config.yml)
+            completions.add(String.valueOf(config.getDismountDurationTicks()));
         } else if (args.length == 2 && args[0].equalsIgnoreCase("format") && isAdmin) {
             completions.add("view");
             completions.add("set");

@@ -24,9 +24,10 @@ console-only: "&cThat subcommand is console-only."
 # --------------------------------------------------------
 
 
-# /nametags dismount <player>
+# /nametags dismount <player> [ticks]
 # ----------------------------------------------------
-dismount-usage: "&cUsage: /{label} dismount <player>"
+dismount-usage: "&cUsage: /{label} dismount <player> [ticks]"
+dismount-invalid-ticks: "&cInvalid tick value: {ticks}"
 # ----------------------------------------------------
 
 
