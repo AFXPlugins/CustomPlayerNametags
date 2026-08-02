@@ -5,7 +5,11 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,6 +32,20 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class PlayerFormatStore {
 
+    /**
+     * Written to {@code player-formats.yml} the first time it's generated
+     * (see {@link #load()}), so an admin who opens the empty file right
+     * after install sees an explanation instead of a blank file.
+     */
+    private static final String EMPTY_FILE_HEADER =
+            "# Per-player nametag-format overrides, set via /nametags format set player.\n"
+                    + "# Managed automatically -- entries are added/removed by that command (and\n"
+                    + "# /nametags format reset player), keyed by player UUID rather than username\n"
+                    + "# so overrides survive name changes. You normally shouldn't need to hand-edit\n"
+                    + "# this file.\n"
+                    + "\n"
+                    + "formats: {}\n";
+
     private final CustomPlayerNametags plugin;
     private final File file;
     private final Map<UUID, String> formats = new ConcurrentHashMap<>();
@@ -39,13 +57,15 @@ public final class PlayerFormatStore {
 
     /**
      * Loads {@code player-formats.yml} from disk into memory, replacing
-     * whatever was previously held. Safe to call if the file doesn't exist
-     * yet (nothing is loaded, in-memory map ends up empty) — the file is
-     * only created the first time an override is actually saved.
+     * whatever was previously held. If the file doesn't exist yet (e.g.
+     * first-ever plugin start), an empty one is generated on the spot so
+     * it's visible right away rather than only appearing after the first
+     * override is actually saved.
      */
     public void load() {
         formats.clear();
         if (!file.exists()) {
+            createEmptyFile();
             return;
         }
 
@@ -69,6 +89,21 @@ public final class PlayerFormatStore {
             if (format != null && !format.isEmpty()) {
                 formats.put(uuid, format);
             }
+        }
+    }
+
+    /** Writes a fresh, empty {@code player-formats.yml} (with an explanatory header) to disk. */
+    private void createEmptyFile() {
+        try {
+            File parent = file.getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
+            try (Writer writer = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8)) {
+                writer.write(EMPTY_FILE_HEADER);
+            }
+        } catch (IOException e) {
+            plugin.getLogger().warning("Failed to create player-formats.yml: " + e.getMessage());
         }
     }
 
