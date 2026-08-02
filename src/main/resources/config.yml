@@ -1,8 +1,8 @@
-#  _____         __             ___  __                  _  __               __              
+#  _____         __             ___  __                  _  __               __
 # / ___/_ _____ / /____  __ _  / _ \/ /__ ___ _____ ____/ |/ /__ ___ _  ___ / /____ ____ ____
 #/ /__/ // (_-</ __/ _ \/  ' \/ ___/ / _ `/ // / -_) __/    / _ `/  ' \/ -_) __/ _ `/ _ `(_-<
 #\___/\_,_/___/\__/\___/_/_/_/_/  /_/\_,_/\_, /\__/_/ /_/|_/\_,_/_/_/_/\__/\__/\_,_/\_, /___/
-#                                        /___/                                     /___/     
+#                                        /___/                                     /___/
 
 
 # =================================
@@ -36,7 +36,7 @@ nametag-format: "%player_name%"
 # can fail if the "passenger" is still attached.
 
 # To prevent this, the plugin can temporarily dismount the passenger before
-# the teleport happens.
+# the teleport happens and automatically remount on world change.
 
 
 # -------------------------------------------------------------------------------
@@ -50,9 +50,8 @@ nametag-format: "%player_name%"
 # Using other world management plugin? Set nametag-dismount-mode to "MANUAL" and
 # add plugin's teleport commands to dismount-commands.
 #
-# Using Skript? Implement this console command followed by a 1 tick delay before 
-# cross-world teleport --> /nametags dismount <player> [ticks]
-# dismount-duration-ticks is used if [ticks] isn't specified.
+# Using Skript? Implement this console command before cross-world teleport:
+# /nametags dismount <player>
 # -------------------------------------------------------------------------------
 
 
@@ -75,11 +74,6 @@ nametag-dismount-mode: AUTO
 dismount-commands:
   - examplecommand1
   - examplecommand2
-
-# How long the nametag stays dismounted.
-# Nametags automatically remount on world change.
-# 20 ticks = 1 second.
-dismount-duration-ticks: 2
 # ==============================================================================
 
 
@@ -88,7 +82,7 @@ dismount-duration-ticks: 2
 # =========================================================================
 #                               Other Options
 # =========================================================================
-# Maximum distance (in blocks) where nametags are shown.
+# Maximum render distance for nametags.
 # Default: 64 (Vanilla value)
 nametag-render-distance: 64
 # =========================================================================

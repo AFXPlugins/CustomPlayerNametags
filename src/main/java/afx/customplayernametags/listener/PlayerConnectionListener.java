@@ -121,10 +121,10 @@ public final class PlayerConnectionListener implements Listener {
      *       a configured {@code "mv tp"} entry matches {@code "/mv tp world"}).</li>
      * </ul>
      *
-     * <p>In every mode the dismount duration is {@code dismount-duration-ticks}
-     * from config, and the nametag automatically remounts after it expires.
-     * None of this affects the console-only
-     * {@code /nametags dismount <player> <ticks>} command, which always works.
+     * <p>In every mode the dismount duration is fixed at 1 tick, and the
+     * nametag automatically remounts after it expires. None of this affects
+     * the console-only {@code /nametags dismount <player>} command, which
+     * always works.
      */
     @EventHandler(priority = EventPriority.LOWEST)
     public void onCommand(PlayerCommandPreprocessEvent event) {

@@ -148,10 +148,17 @@ public final class NametagDisplayManager {
      * correction and the real (unmoving) attach point were fighting each
      * other. Using one fixed value for every pose and letting the
      * translation below carry 100% of the pose-dependent height change
-     * fixes both directions at once. The exact number only needs to be in
-     * the right ballpark — it's a constant that's subtracted then
-     * (approximately) re-added by the real attach point, so any consistent
-     * value works; this is simply a typical standing player height.
+     * fixes both directions at once.
+     *
+     * <p>This value only ever needs to be "in the right ballpark" — it's
+     * subtracted in {@link #buildTransformation} and then (approximately)
+     * re-added by the client's own real attach point, so any small error in
+     * this constant mostly cancels out against that real (but API-invisible)
+     * attach point and was never noticeable. This constant is only ever used
+     * while actually mounted; a dismounted display is positioned entirely
+     * from the player's live eye location instead (see {@link
+     * #dismountedRenderLocation}), which needs no approximation of the
+     * attach point at all.
      */
     private static final double ASSUMED_MOUNT_OFFSET = 1.8;
 
@@ -194,6 +201,18 @@ public final class NametagDisplayManager {
 
     /** Uniform 1:1 scale, reused for every {@link Transformation} we build. */
     private static final Vector3f UNIT_SCALE = new Vector3f(1f, 1f, 1f);
+
+    /**
+     * Zero-translation {@link Transformation}, applied to a display while it
+     * is dismounted (see {@link #dismountOne}). While dismounted, the
+     * display's on-screen height is driven entirely by the teleport target
+     * in {@link #dismountedRenderLocation}, which already bakes in the
+     * correct pose-aware height above the player's eyes — so the
+     * Transformation itself must contribute nothing extra, or the height
+     * would be double-counted.
+     */
+    private static final Transformation FLAT_TRANSFORMATION = new Transformation(
+            new Vector3f(0f, 0f, 0f), IDENTITY_ROTATION, UNIT_SCALE, IDENTITY_ROTATION);
 
     /**
      * Fully opaque text. Use 255 (not the API's -1 sentinel) so Geyser/Bedrock
@@ -369,12 +388,37 @@ public final class NametagDisplayManager {
             // already does — closes that race.
             Long dismountUntil = dismountUntilTick.get(target.getUniqueId());
             boolean dismountActive = dismountUntil != null && currentTick < dismountUntil;
-            if (!dismountActive) {
-                ensureMounted(target, pair);
+            if (!dismountActive && !ensureMounted(target, pair)) {
+                // addPassenger() declined the mount (most often the
+                // player's own entity state hadn't fully settled yet in
+                // the tick right after a teleport). Retrying the exact
+                // same addPassenger() call again next time is what used to
+                // leave the tag permanently detached whenever the
+                // underlying condition didn't clear on its own — there was
+                // nothing to notice the failure and try something else.
+                // Falling back to a full respawn here guarantees recovery:
+                // a freshly spawned pair mounts from scratch rather than
+                // depending on the old entities ever becoming mountable.
+                remove(target.getUniqueId());
+                pair = spawn(target, nameComponent);
+                if (pair == null) {
+                    return;
+                }
+                displays.put(target.getUniqueId(), pair);
             }
             boolean sneaking = target.isSneaking();
             Boolean previous = lastSneaking.put(target.getUniqueId(), sneaking);
-            if (forceAppearance || previous == null || previous != sneaking) {
+            if (dismountActive) {
+                // Tag is mid command-dismount: text/opacity can still
+                // usefully refresh, but never touch the Transformation
+                // here. Height while dismounted comes entirely from
+                // tickMaintain()'s per-tick teleport to the player's live
+                // eye location (see updateDismountedPosition) — setting a
+                // "mounted" Transformation on top of that here would
+                // double-count the height and produce a visible jump
+                // before the dismount window has even ended.
+                refreshTextOnly(target, pair, sneaking);
+            } else if (forceAppearance || previous == null || previous != sneaking) {
                 // Sneak flipped (or a forced refresh was requested) — must
                 // go through the full transition (text dim, opacity, height
                 // ease, LOS-aware Bedrock reveal, etc).
@@ -437,6 +481,94 @@ public final class NametagDisplayManager {
         if (vehicle != null && vehicle != owner) {
             vehicle.removePassenger(display);
         }
+        // While mounted, the display's own server-side location is never
+        // touched — the class javadoc explains why (position is derived
+        // entirely client-side from the vehicle's transform). That means
+        // the entity's actual coordinates are still whatever they were set
+        // to at spawn() (or the last world-change respawn), which by now
+        // can be nowhere near the player. The instant it's detached above,
+        // the client stops deriving its position from the owner and falls
+        // back to that stale, real location — so without this, the tag
+        // doesn't just hold still at the player's current spot, it snaps
+        // to wherever it was left behind.
+        //
+        // Rather than approximating the invisible client-side passenger
+        // attach point with a fixed guessed constant (an earlier version
+        // teleported to owner.getLocation() — the player's FEET — plus a
+        // hand-tuned offset meant to reproduce that attach point), this
+        // teleports straight to dismountedRenderLocation(), which is
+        // computed from the player's own live, pose-correct eye location.
+        // That removes the guesswork entirely, so there's no residual gap
+        // left to show up as a visible jump the instant a command dismounts
+        // the tag. The Transformation is flattened to zero at the same time
+        // so the teleport target is the single source of truth for height —
+        // see tickMaintain()/updateDismountedPosition() for how this stays
+        // correct every tick for as long as the dismount window lasts, and
+        // restoreMountedTransformation() for how the real Transformation
+        // comes back once it remounts.
+        if (owner != null) {
+            display.setInterpolationDelay(0);
+            display.setInterpolationDuration(0);
+            display.setTransformation(FLAT_TRANSFORMATION);
+            display.teleport(dismountedRenderLocation(owner));
+        }
+    }
+
+    /**
+     * Where a dismounted (temporarily un-passengered) display should render,
+     * computed directly from the player's own live {@link
+     * Player#getEyeLocation()} rather than a fixed approximation of the
+     * invisible client-side passenger attach point. {@code getEyeLocation()}
+     * is already pose-correct — it shrinks on its own while sneaking — so
+     * this stays accurate even if the player's pose changes mid-dismount,
+     * which the old fixed feet-based teleport had no way to react to since
+     * the sneak-triggered Transformation update in tickMaintain() is itself
+     * skipped for the whole dismount window (see tickMaintain()).
+     */
+    private Location dismountedRenderLocation(Player owner) {
+        double aboveEyes = config.getNametagHeightOffset() - STANDING_EYE_HEIGHT;
+        return owner.getEyeLocation().add(0.0, aboveEyes, 0.0);
+    }
+
+    /**
+     * Re-teleports both of a dismounted owner's displays to {@link
+     * #dismountedRenderLocation} every tick the dismount window is still
+     * active (called from {@link #tickMaintain}). Without this, a command
+     * dismount placed the tag once and then left it completely frozen in
+     * place for the rest of dismount-duration-ticks (fixed at 1 tick) — so
+     * a player who moved at all while a command was
+     * processing saw their own tag get left behind in midair, then visibly
+     * snap back into place the instant it remounted. Continuously tracking
+     * the player's live eye location here keeps the tag glued to them the
+     * entire time instead, exactly as if it were still mounted.
+     */
+    private void updateDismountedPosition(Player owner, DisplayPair pair) {
+        Location target = dismountedRenderLocation(owner);
+        if (pair.javaDisplay.isValid()) {
+            pair.javaDisplay.teleport(target);
+        }
+        if (pair.bedrockDisplay.isValid()) {
+            pair.bedrockDisplay.teleport(target);
+        }
+    }
+
+    /**
+     * Restores the real passenger {@link Transformation} on both displays
+     * once a dismount window has just expired, undoing the {@link
+     * #FLAT_TRANSFORMATION} that {@link #dismountOne} applied. Called
+     * before {@link #ensureMounted} re-attaches the passenger so the tag
+     * never renders — even for a single frame — with a flattened
+     * Transformation while actually mounted, which would otherwise show up
+     * as a jump down to the player's feet right as the tag remounts.
+     */
+    private void restoreMountedTransformation(Player owner, DisplayPair pair) {
+        boolean sneaking = owner.isSneaking();
+        pair.javaDisplay.setInterpolationDelay(0);
+        pair.javaDisplay.setInterpolationDuration(0);
+        pair.javaDisplay.setTransformation(buildTransformation(sneaking, false));
+        pair.bedrockDisplay.setInterpolationDelay(0);
+        pair.bedrockDisplay.setInterpolationDuration(0);
+        pair.bedrockDisplay.setTransformation(buildTransformation(sneaking, true));
     }
 
     public void remove(UUID uuid) {
@@ -584,7 +716,7 @@ public final class NametagDisplayManager {
      *                          applies (see {@link #buildTransformation}).
      */
     private TextDisplay createDisplay(Player owner, Component bright, Location loc, boolean sneaking,
-                                       boolean forBedrockViewer) {
+                                      boolean forBedrockViewer) {
         World world = loc.getWorld();
         if (world == null) {
             return null;
@@ -624,8 +756,15 @@ public final class NametagDisplayManager {
      * (a world change, another plugin, the owner entering/leaving a
      * vehicle, etc) broke the mount relationship. Cheap no-op in the
      * overwhelmingly common case where they're already mounted correctly.
+     *
+     * @return true if both displays are confirmed mounted after this call,
+     *         false if {@link Entity#addPassenger} declined one or both
+     *         (e.g. the owner's chunk/entity state hadn't finished settling
+     *         yet right after a teleport). Callers use this to detect a
+     *         mount that didn't actually take instead of assuming it did —
+     *         see the callers for why that matters.
      */
-    private void ensureMounted(Player owner, DisplayPair pair) {
+    private boolean ensureMounted(Player owner, DisplayPair pair) {
         List<Entity> passengers = owner.getPassengers();
         if (!passengers.contains(pair.javaDisplay)) {
             owner.addPassenger(pair.javaDisplay);
@@ -633,6 +772,8 @@ public final class NametagDisplayManager {
         if (!passengers.contains(pair.bedrockDisplay)) {
             owner.addPassenger(pair.bedrockDisplay);
         }
+        List<Entity> after = owner.getPassengers();
+        return after.contains(pair.javaDisplay) && after.contains(pair.bedrockDisplay);
     }
 
     /**
@@ -706,7 +847,7 @@ public final class NametagDisplayManager {
     }
 
     private void applySneakStateToOne(TextDisplay display, Component text, byte opacity,
-                                       boolean sneaking, boolean forBedrockViewer, boolean occluded) {
+                                      boolean sneaking, boolean forBedrockViewer, boolean occluded) {
         display.setSeeThrough(effectiveSeeThrough(sneaking, occluded));
 
         if (forBedrockViewer) {
@@ -990,13 +1131,42 @@ public final class NametagDisplayManager {
             if (dismountUntil != null) {
                 if (currentTick < dismountUntil) {
                     // Dismount window still active — leave the passenger
-                    // detached so commands/teleports aren't blocked.
+                    // detached (so commands/teleports aren't blocked), but
+                    // keep tracking the player's live position every tick
+                    // so the tag holds its spot above their head instead of
+                    // freezing wherever they happened to be when the
+                    // command was typed.
+                    updateDismountedPosition(player, pair);
                     continue;
                 }
                 dismountUntilTick.remove(uuid);
+                // The window just closed — restore the real Transformation
+                // now, before ensureMounted() re-attaches the passenger
+                // below, so the tag never renders even one frame mounted
+                // with the flattened dismount Transformation still active.
+                restoreMountedTransformation(player, pair);
             }
 
-            ensureMounted(player, pair);
+            if (!ensureMounted(player, pair)) {
+                // addPassenger() didn't take (most often the player's own
+                // entity state hadn't finished settling in the tick right
+                // after a teleport/command). Nothing here was detecting
+                // that failure before, so tickMaintain kept calling the
+                // same failing ensureMounted() every tick forever if the
+                // underlying condition never happened to clear on its own
+                // — from the player's side that looked exactly like the
+                // tag freezing in place and staying detached for good.
+                // Forcing a full respawn through NametagManager guarantees
+                // recovery instead of an indefinite retry: a freshly
+                // spawned pair mounts from scratch at the player's current
+                // location rather than depending on the old, stuck
+                // entities ever becoming mountable again.
+                remove(uuid);
+                if (nametagManager != null) {
+                    nametagManager.refresh(player, true);
+                }
+                continue;
+            }
 
             boolean sneaking = player.isSneaking();
             Boolean previous = lastSneaking.put(uuid, sneaking);

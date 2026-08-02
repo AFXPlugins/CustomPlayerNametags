@@ -226,6 +226,40 @@ public final class NametagManager {
     }
 
     /**
+     * The raw, unparsed global {@code nametag-format} from config.yml,
+     * exactly as stored (placeholders unresolved, {@code &} codes
+     * untranslated). Backs {@code /nametags format view unparsed global}.
+     */
+    public String getGlobalRawFormat() {
+        return config.getNametagFormat();
+    }
+
+    /**
+     * The global {@code nametag-format} resolved through PlaceholderAPI
+     * (with no specific player context — player-only placeholders will
+     * resolve blank or unresolved) and with {@code &} colors translated.
+     */
+    public String getGlobalParsedFormat() {
+        return getGlobalParsedFormat(null);
+    }
+
+    /**
+     * Same as {@link #getGlobalParsedFormat()}, but placeholders are resolved
+     * using {@code context} as the PlaceholderAPI subject — so player-only
+     * placeholders (e.g. {@code %player_name%}) resolve to {@code context}'s
+     * values instead of coming back blank or unresolved. Backs
+     * {@code /nametags format view global parsed <player>}.
+     */
+    public String getGlobalParsedFormat(Player context) {
+        String raw = getGlobalRawFormat();
+        if (raw == null || raw.isEmpty()) {
+            return "";
+        }
+        String result = placeholderApiAvailable ? PlaceholderAPI.setPlaceholders(context, raw) : raw;
+        return ChatColor.translateAlternateColorCodes('&', result);
+    }
+
+    /**
      * Sets (or, if {@code format} is {@code null}, clears) a per-player
      * {@code nametag-format} override for {@code uuid}, replacing the global
      * format just for them, persists it to {@code player-formats.yml}, and

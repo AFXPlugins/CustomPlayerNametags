@@ -10,7 +10,7 @@ import java.util.Locale;
 
 public final class ConfigManager {
 
-    private static final String DEFAULT_FORMAT = "%luckperms_prefix%%essentials_nickname%";
+    private static final String DEFAULT_FORMAT = "%player_name%";
 
     /** Height (in blocks) the nametag floats above the player. */
     private static final double NAMETAG_HEIGHT_OFFSET = 2.085;
@@ -27,7 +27,7 @@ public final class ConfigManager {
      * {@code nametag-dismount-mode} in config.yml.
      *
      * <p>None of these values affect the console-only
-     * {@code /nametags dismount <player> <ticks>} command, which always
+     * {@code /nametags dismount <player>} command, which always
      * works regardless of the configured mode.
      */
     public enum DismountMode {
@@ -52,9 +52,16 @@ public final class ConfigManager {
 
     private final CustomPlayerNametags plugin;
 
+    /**
+     * How long (in ticks) a player's nametag stays dismounted after a
+     * triggering command, and the value the console-only
+     * {@code /nametags dismount <player>} command always uses. No longer
+     * configurable via config.yml — fixed at 1 tick.
+     */
+    private static final long DISMOUNT_DURATION_TICKS = 1L;
+
     private String nametagFormat;
     private double nametagRenderDistance;
-    private long dismountDurationTicks;
     private DismountMode nametagDismountMode;
     private List<List<String>> dismountCommands;
 
@@ -71,9 +78,6 @@ public final class ConfigManager {
         // Default: 64 blocks, vanilla's own fixed cutoff for rendering any
         // entity nametag regardless of server entity-tracking-range settings.
         this.nametagRenderDistance = cfg.getDouble("nametag-render-distance", 64.0);
-
-        // Default: 300 ticks (15 seconds)
-        this.dismountDurationTicks = Math.max(0L, cfg.getLong("dismount-duration-ticks", 300L));
 
         this.nametagDismountMode = DismountMode.parse(cfg.getString("nametag-dismount-mode", "AUTO"));
 
@@ -133,6 +137,27 @@ public final class ConfigManager {
         return nametagFormat;
     }
 
+    /**
+     * Sets the global {@code nametag-format} to {@code format}, persists it
+     * to config.yml, and updates the in-memory value immediately (no reload
+     * needed). Passing {@code null} or an empty string resets it back to the
+     * default. Backs {@code /nametags format set global}.
+     */
+    public void setGlobalFormat(String format) {
+        String value = (format == null || format.isEmpty()) ? DEFAULT_FORMAT : format;
+        this.nametagFormat = value;
+        plugin.getConfig().set("nametag-format", value);
+        plugin.saveConfig();
+    }
+
+    /**
+     * Resets the global {@code nametag-format} back to the default (the
+     * player's plain username). Backs {@code /nametags format reset global}.
+     */
+    public void resetGlobalFormat() {
+        setGlobalFormat(DEFAULT_FORMAT);
+    }
+
     public double getNametagHeightOffset() {
         return NAMETAG_HEIGHT_OFFSET;
     }
@@ -184,20 +209,20 @@ public final class ConfigManager {
 
     /**
      * How long (in ticks) a player's nametag should remain dismounted after
-     * a triggering command. Configured via {@code dismount-duration-ticks}
-     * in config.yml (default 300 ticks = 15 seconds). Also used as the
-     * duration for every entry in {@code dismount-commands} — there are no
-     * longer per-command overrides. The player's nametag will automatically
-     * remount after this duration.
+     * a triggering command. Fixed at 1 tick — no longer configurable via
+     * config.yml. Also used as the duration for every entry in
+     * {@code dismount-commands}, and for the console-only
+     * {@code /nametags dismount <player>} command. The player's nametag will
+     * automatically remount after this duration.
      */
     public long getDismountDurationTicks() {
-        return dismountDurationTicks;
+        return DISMOUNT_DURATION_TICKS;
     }
 
     /**
      * Which automatic-dismount behavior is active, per {@code nametag-dismount-mode}
      * in config.yml. Does not affect the console-only
-     * {@code /nametags dismount <player> <ticks>} command, which always works.
+     * {@code /nametags dismount <player>} command, which always works.
      */
     public DismountMode getNametagDismountMode() {
         return nametagDismountMode;
