@@ -1,8 +1,8 @@
-#  _____         __             ___  __                  _  __               __
-# / ___/_ _____ / /____  __ _  / _ \/ /__ ___ _____ ____/ |/ /__ ___ _  ___ / /____ ____ ____
-#/ /__/ // (_-</ __/ _ \/  ' \/ ___/ / _ `/ // / -_) __/    / _ `/  ' \/ -_) __/ _ `/ _ `(_-<
-#\___/\_,_/___/\__/\___/_/_/_/_/  /_/\_,_/\_, /\__/_/ /_/|_/\_,_/_/_/_/\__/\__/\_,_/\_, /___/
-#                                        /___/                                     /___/
+#   _____         __             ___  __                  _  __               __
+#  / ___/_ _____ / /____  __ _  / _ \/ /__ ___ _____ ____/ |/ /__ ___ _  ___ / /____ ____ ____
+# / /__/ // (_-</ __/ _ \/  ' \/ ___/ / _ `/ // / -_) __/    / _ `/  ' \/ -_) __/ _ `/ _ `(_-<
+# \___/\_,_/___/\__/\___/_/_/_/_/  /_/\_,_/\_, /\__/_/ /_/|_/\_,_/_/_/_/\__/\__/\_,_/\_, /___/
+#                                         /___/                                     /___/
 
 
 # =================================
@@ -19,6 +19,8 @@
 # Global format used for all player nametags.
 # Supports PlaceholderAPI placeholders and '&' colors.
 # Use "/nametags format" to set custom formats for individual players.
+
+# Default: %player_name%
 # Example: "%luckperms_prefix%%essentials_nickname%"
 nametag-format: "%player_name%"
 # ========================================================================
@@ -34,7 +36,7 @@ nametag-format: "%player_name%"
 #  if the "passenger" is still attached.
 
 # To prevent this, the plugin can temporarily dismount the passenger before
-#  the teleport happens and automatically remount on world change.
+#  the teleport happens and automatically remount it on world change.
 
 
 # -------------------------------------------------------------------------------
@@ -59,10 +61,10 @@ nametag-format: "%player_name%"
 #   NONE   - Disables nametag dismounting.
 # ------------------------------------------------------------------------
 #   AUTO   - Automatically dismounts the nametag whenever the player runs
-#             a command.
+#            a command.
 # ------------------------------------------------------------------------
 #   MANUAL - Only dismounts the nametag when a command listed in
-#             dismount-commands is run.
+#            dismount-commands is run.
 # ------------------------------------------------------------------------
 nametag-dismount-mode: AUTO
 
@@ -75,13 +77,11 @@ dismount-commands:
 # ==============================================================================
 
 
-
-
 # =========================================================================
 #                               Other Options
 # =========================================================================
 # Maximum render distance for nametags.
-# Default: 64 (Vanilla value)
+# Default: 64 (Same as vanilla)
 nametag-render-distance: 64
 # =========================================================================
 
