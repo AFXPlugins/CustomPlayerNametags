@@ -77,7 +77,7 @@ dismount-commands:
 
 # How long (in ticks) the nametag stays dismounted.
 # The nametag remounts immediately after the player changes worlds.
-# Nametag dismounting will not work if this value is < 2.
+# Values of 1 or lower will automatically be adjusted to 2 internally.
 # Default: 5
 dismount-duration-ticks: 5
 # ==============================================================================
