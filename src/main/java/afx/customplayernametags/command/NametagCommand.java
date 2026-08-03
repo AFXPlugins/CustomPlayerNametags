@@ -61,8 +61,8 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             if (args.length == 3) {
                 try {
                     durationTicks = Long.parseLong(args[2]);
-                    if (durationTicks < 0) {
-                        durationTicks = 0;
+                    if (durationTicks < ConfigManager.MIN_DISMOUNT_DURATION_TICKS) {
+                        durationTicks = ConfigManager.MIN_DISMOUNT_DURATION_TICKS;
                     }
                 } catch (NumberFormatException e) {
                     messages.send(sender, "dismount-invalid-ticks", "{ticks}", args[2]);

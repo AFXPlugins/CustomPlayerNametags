@@ -74,6 +74,17 @@ public final class ConfigManager {
      */
     private static final long DEFAULT_DISMOUNT_DURATION_TICKS = 10L;
 
+    /**
+     * Floor for {@code dismount-duration-ticks} (and the console command's
+     * optional {@code [ticks]} argument). Below this, the dismount window
+     * can close on the very next {@code tickMaintain()} tick after being
+     * opened — leaving whatever triggered the dismount (a teleport or other
+     * command) effectively no buffer to finish before the nametag remounts
+     * and blocks it again, which is exactly the race this system exists to
+     * prevent. See config.yml's own "Don't set value lower than 2" note.
+     */
+    public static final long MIN_DISMOUNT_DURATION_TICKS = 2L;
+
     private String nametagFormat;
     private double nametagRenderDistance;
     private DismountMode nametagDismountMode;
@@ -97,7 +108,7 @@ public final class ConfigManager {
         this.nametagDismountMode = DismountMode.parse(cfg.getString("nametag-dismount-mode", "AUTO"));
 
         long configuredTicks = cfg.getLong("dismount-duration-ticks", DEFAULT_DISMOUNT_DURATION_TICKS);
-        this.dismountDurationTicks = configuredTicks > 0 ? configuredTicks : DEFAULT_DISMOUNT_DURATION_TICKS;
+        this.dismountDurationTicks = Math.max(configuredTicks, MIN_DISMOUNT_DURATION_TICKS);
 
         List<List<String>> commands = new ArrayList<>();
         for (String raw : cfg.getStringList("dismount-commands")) {
