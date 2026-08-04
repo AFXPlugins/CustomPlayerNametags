@@ -199,7 +199,28 @@ public final class NametagManager {
             return "";
         }
         String result = placeholderApiAvailable ? PlaceholderAPI.setPlaceholders(target, raw) : raw;
-        return ChatColor.translateAlternateColorCodes('&', result);
+        result = ChatColor.translateAlternateColorCodes('&', result);
+        return applyLineBreaks(result);
+    }
+
+    /**
+     * Turns a literal two-character {@code \n} escape sequence — as typed
+     * in {@code config.yml} (in a single-quoted or plain scalar, where YAML
+     * itself won't interpret it) or straight into
+     * {@code /nametags format set <player> "<format>"} — into a real line
+     * break character, so multi-line nametags work the same regardless of
+     * how the format string was authored.
+     *
+     * <p>Deliberately applied <em>after</em> {@code &} color translation:
+     * doing it first would risk a color code accidentally splitting across
+     * the two characters of the escape sequence on a hand-typed format.
+     * Real newline characters already present in the string (e.g. from a
+     * YAML double-quoted or block-style scalar, which SnakeYAML already
+     * unescapes on load) are left untouched — this only ever replaces the
+     * literal backslash-n text.
+     */
+    private static String applyLineBreaks(String text) {
+        return text.replace("\\n", "\n");
     }
 
     /**
@@ -288,7 +309,8 @@ public final class NametagManager {
             return "";
         }
         String result = PlaceholderAPI.setPlaceholders(context, raw);
-        return ChatColor.translateAlternateColorCodes('&', result);
+        result = ChatColor.translateAlternateColorCodes('&', result);
+        return applyLineBreaks(result);
     }
 
     /**

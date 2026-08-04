@@ -21,6 +21,7 @@
 #
 # Global format used for all player nametags.
 # Supports PlaceholderAPI placeholders and '&' colors.
+# Use "\n" in the format to start a new line.
 # Use "/nametags format" to set custom formats for individual players.
 
 # Default: %player_name%

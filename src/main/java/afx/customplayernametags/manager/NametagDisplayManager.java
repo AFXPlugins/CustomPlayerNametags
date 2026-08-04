@@ -3,6 +3,7 @@ package afx.customplayernametags.manager;
 import afx.customplayernametags.CustomPlayerNametags;
 import afx.customplayernametags.config.ConfigManager;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -311,9 +312,21 @@ public final class NametagDisplayManager {
          */
         final Set<UUID> bedrockHiddenFrom = ConcurrentHashMap.newKeySet();
 
-        DisplayPair(TextDisplay javaDisplay, TextDisplay bedrockDisplay) {
+        /**
+         * Number of lines (1 + the count of internal newlines) in the text
+         * currently shown on this pair. Kept up to date wherever the text
+         * changes (see {@link #countLines(Component)}) so that any later
+         * rebuild of {@code bedrockDisplay}'s {@link Transformation} — a
+         * sneak toggle, a viewer being (re)shown the tag, etc — always
+         * applies {@link ConfigManager#getBedrockLineHeightAdjust()} for
+         * the correct current line count instead of a stale one.
+         */
+        volatile int lineCount = 1;
+
+        DisplayPair(TextDisplay javaDisplay, TextDisplay bedrockDisplay, int lineCount) {
             this.javaDisplay = javaDisplay;
             this.bedrockDisplay = bedrockDisplay;
+            this.lineCount = lineCount;
         }
 
         boolean isValid() {
@@ -670,7 +683,7 @@ public final class NametagDisplayManager {
                     // whatever stale value was last set before it was hidden.
                     pair.bedrockDisplay.setInterpolationDelay(0);
                     pair.bedrockDisplay.setInterpolationDuration(0);
-                    pair.bedrockDisplay.setTransformation(buildTransformation(sneaking, true));
+                    pair.bedrockDisplay.setTransformation(buildTransformation(sneaking, true, pair.lineCount));
                 }
                 viewer.showEntity(plugin, pair.bedrockDisplay);
             }
@@ -686,9 +699,10 @@ public final class NametagDisplayManager {
         boolean sneaking = owner.isSneaking();
         lastSneaking.put(owner.getUniqueId(), sneaking);
 
+        int lineCount = countLines(name);
         Location loc = owner.getLocation();
-        TextDisplay javaDisplay = createDisplay(owner, name, loc, sneaking, false);
-        TextDisplay bedrockDisplay = createDisplay(owner, name, loc, sneaking, true);
+        TextDisplay javaDisplay = createDisplay(owner, name, loc, sneaking, false, lineCount);
+        TextDisplay bedrockDisplay = createDisplay(owner, name, loc, sneaking, true, lineCount);
         if (javaDisplay == null || bedrockDisplay == null) {
             if (javaDisplay != null) {
                 javaDisplay.remove();
@@ -702,7 +716,7 @@ public final class NametagDisplayManager {
         owner.addPassenger(javaDisplay);
         owner.addPassenger(bedrockDisplay);
 
-        DisplayPair pair = new DisplayPair(javaDisplay, bedrockDisplay);
+        DisplayPair pair = new DisplayPair(javaDisplay, bedrockDisplay, lineCount);
         applyViewerVisibility(owner, pair, sneaking);
         return pair;
     }
@@ -717,16 +731,20 @@ public final class NametagDisplayManager {
      *                          to Bedrock/Geyser viewers (as opposed to Java
      *                          viewers) — controls which height correction
      *                          applies (see {@link #buildTransformation}).
+     * @param lineCount number of lines in {@code bright} (see
+     *                  {@link #countLines(Component)}) — only affects the
+     *                  height correction applied when {@code forBedrockViewer}
+     *                  is true.
      */
     private TextDisplay createDisplay(Player owner, Component bright, Location loc, boolean sneaking,
-                                      boolean forBedrockViewer) {
+                                      boolean forBedrockViewer, int lineCount) {
         World world = loc.getWorld();
         if (world == null) {
             return null;
         }
 
         final Component displayText = sneaking ? dim(bright, forBedrockViewer) : bright;
-        final Transformation transformation = buildTransformation(sneaking, forBedrockViewer);
+        final Transformation transformation = buildTransformation(sneaking, forBedrockViewer, lineCount);
 
         return world.spawn(loc, TextDisplay.class, entity -> {
             entity.text(displayText);
@@ -799,6 +817,22 @@ public final class NametagDisplayManager {
         pair.javaDisplay.setTextOpacity(opacity);
         pair.bedrockDisplay.text(bedrockText);
         pair.bedrockDisplay.setTextOpacity(opacity);
+
+        // The line count only ever affects bedrockDisplay's Transformation
+        // (see buildTransformation) — javaDisplay needs nothing extra here
+        // since a vanilla client keeps its bottom line fixed on its own.
+        // Only touch it when the count actually changed (e.g. a placeholder
+        // whose resolved value gained/lost a line): rebuilding the
+        // Transformation on every periodic refresh regardless would be
+        // wasted metadata traffic for the overwhelmingly common case where
+        // nothing about the line count changed.
+        int newLineCount = countLines(bright);
+        if (newLineCount != pair.lineCount) {
+            pair.lineCount = newLineCount;
+            pair.bedrockDisplay.setInterpolationDelay(0);
+            pair.bedrockDisplay.setInterpolationDuration(0);
+            pair.bedrockDisplay.setTransformation(buildTransformation(sneaking, true, newLineCount));
+        }
     }
 
     /**
@@ -842,21 +876,23 @@ public final class NametagDisplayManager {
         Component bedrockText = sneaking ? dim(bright, true) : bright;
         byte opacity = sneaking ? OPACITY_SNEAKING : OPACITY_STANDING;
         boolean occluded = anyJavaViewerOccluded(owner);
+        pair.lineCount = countLines(bright);
 
-        applySneakStateToOne(pair.javaDisplay, javaText, opacity, sneaking, false, occluded);
-        applySneakStateToOne(pair.bedrockDisplay, bedrockText, opacity, sneaking, true, occluded);
+        applySneakStateToOne(pair.javaDisplay, javaText, opacity, sneaking, false, occluded, pair.lineCount);
+        applySneakStateToOne(pair.bedrockDisplay, bedrockText, opacity, sneaking, true, occluded, pair.lineCount);
 
         applyViewerVisibility(owner, pair, sneaking);
     }
 
     private void applySneakStateToOne(TextDisplay display, Component text, byte opacity,
-                                      boolean sneaking, boolean forBedrockViewer, boolean occluded) {
+                                      boolean sneaking, boolean forBedrockViewer, boolean occluded,
+                                      int lineCount) {
         display.setSeeThrough(effectiveSeeThrough(sneaking, occluded));
 
         if (forBedrockViewer) {
             display.text(text);
             display.setTextOpacity(opacity);
-            snapBedrockHeight(display, buildTransformation(sneaking, true));
+            snapBedrockHeight(display, buildTransformation(sneaking, true, lineCount));
             return;
         }
 
@@ -868,7 +904,7 @@ public final class NametagDisplayManager {
             display.setTextOpacity(opacity);
             display.setInterpolationDelay(0);
             display.setInterpolationDuration(HEIGHT_TRANSITION_TICKS);
-            display.setTransformation(buildTransformation(true, false));
+            display.setTransformation(buildTransformation(true, false, lineCount));
             return;
         }
 
@@ -896,7 +932,7 @@ public final class NametagDisplayManager {
             if (display.isValid()) {
                 display.setInterpolationDelay(0);
                 display.setInterpolationDuration(HEIGHT_TRANSITION_TICKS);
-                display.setTransformation(buildTransformation(false, false));
+                display.setTransformation(buildTransformation(false, false, lineCount));
             }
         });
     }
@@ -1248,13 +1284,58 @@ public final class NametagDisplayManager {
      * and {@link ConfigManager#getBedrockSneakHeightAdjust()} are therefore
      * only ever added to the entity a Bedrock viewer is shown, regardless of
      * which platform the owner themselves is on.
+     *
+     * @param lineCount number of lines (see {@link #countLines(Component)})
+     *                  currently on the entity this transformation is being
+     *                  built for. Only affects the result when
+     *                  {@code forBedrockViewer} is true — see
+     *                  {@link ConfigManager#getBedrockLineHeightAdjust()}
+     *                  for why the Java side needs nothing extra here.
      */
-    private Transformation buildTransformation(boolean sneaking, boolean forBedrockViewer) {
+    private Transformation buildTransformation(boolean sneaking, boolean forBedrockViewer, int lineCount) {
         double translationY = heightAboveFeet(sneaking, forBedrockViewer) - ASSUMED_MOUNT_OFFSET;
+        if (forBedrockViewer && lineCount > 1) {
+            translationY += (lineCount - 1) * config.getBedrockLineHeightAdjust();
+        }
         return new Transformation(
                 new Vector3f(0f, (float) translationY, 0f),
                 IDENTITY_ROTATION,
                 UNIT_SCALE,
                 IDENTITY_ROTATION);
+    }
+
+    /**
+     * Number of lines in {@code text} — 1 plus however many literal
+     * {@code '\n'} characters appear anywhere in its content (including
+     * children). {@link afx.customplayernametags.manager.NametagManager}
+     * turns a hand-typed {@code \n} escape into a real newline character
+     * before this ever gets built into a {@link Component}, so a plain
+     * character count here is all that's needed — no re-parsing of any
+     * escape syntax.
+     *
+     * <p>Walks the full component tree (not just the root) since {@link
+     * net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer}
+     * splits the text into a tree of child {@link TextComponent}s at every
+     * color/formatting change, so a newline immediately after a color code
+     * lands in a child node rather than the root.
+     */
+    private static int countLines(Component text) {
+        return 1 + countInternalNewlines(text);
+    }
+
+    private static int countInternalNewlines(Component component) {
+        int count = 0;
+        if (component instanceof TextComponent textComponent) {
+            String content = textComponent.content();
+            for (int i = 0; i < content.length(); i++) {
+                if (content.charAt(i) == '\n') {
+                    count++;
+                }
+            }
+        }
+        for (Component child : component.children()) {
+            count += countInternalNewlines(child);
+        }
+        return count;
     }
 }

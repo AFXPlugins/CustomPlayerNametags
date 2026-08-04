@@ -29,6 +29,15 @@ public final class ConfigManager {
      * analytically the way the Java-side offset can.
      */
     private static final double BEDROCK_DISMOUNT_HEIGHT_ADJUST = 0.15;
+    /**
+     * Extra height, per additional line, applied only to a Bedrock/Geyser
+     * viewer's copy of a multi-line nametag. See
+     * {@link #getBedrockLineHeightAdjust()}. Left at {@code 0.0} — i.e. no
+     * correction — since testing found Bedrock/Geyser already keeps the
+     * bottom line of a multi-line nametag in the right place on its own,
+     * the same as Java.
+     */
+    private static final double BEDROCK_LINE_HEIGHT_ADJUST = 0.0;
 
     /**
      * Controls when the plugin automatically dismounts a player's nametag
@@ -248,6 +257,21 @@ public final class ConfigManager {
      */
     public double getBedrockDismountHeightAdjust() {
         return BEDROCK_DISMOUNT_HEIGHT_ADJUST;
+    }
+
+    /**
+     * Extra height (in blocks), added <b>per additional line</b> beyond the
+     * first, to a Bedrock/Geyser viewer's copy of a multi-line nametag —
+     * see {@link #BEDROCK_LINE_HEIGHT_ADJUST}. Applied once per line beyond
+     * the first (i.e. {@code (lineCount - 1) *} this value), directly on
+     * top of {@link #getBedrockHeightAdjust()}, on the entity a Bedrock
+     * viewer is shown ({@code javaDisplay} never gets this — a vanilla
+     * client's {@code TextDisplay} is bottom-anchored, so it keeps a
+     * multi-line tag's bottom line fixed on its own, with no extra math
+     * needed).
+     */
+    public double getBedrockLineHeightAdjust() {
+        return BEDROCK_LINE_HEIGHT_ADJUST;
     }
 
     /**
