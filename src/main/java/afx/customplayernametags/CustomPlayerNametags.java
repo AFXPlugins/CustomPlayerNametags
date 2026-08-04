@@ -8,6 +8,7 @@ import afx.customplayernametags.config.PlayerFormatStore;
 import afx.customplayernametags.listener.PlayerConnectionListener;
 import afx.customplayernametags.manager.NametagDisplayManager;
 import afx.customplayernametags.manager.NametagManager;
+import afx.customplayernametags.placeholder.CustomPlayerNametagsExpansion;
 import afx.customplayernametags.update.UpdateChecker;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -51,6 +52,10 @@ public final class CustomPlayerNametags extends JavaPlugin {
         this.displayManager = new NametagDisplayManager(this, configManager);
         this.nametagManager.setDisplayManager(displayManager);
         this.displayManager.setNametagManager(nametagManager);
+
+        if (nametagManager.isPlaceholderApiAvailable()) {
+            new CustomPlayerNametagsExpansion(this, nametagManager).register();
+        }
 
         getServer().getPluginManager().registerEvents(
                 new PlayerConnectionListener(this, configManager, nametagManager, messageManager), this);
