@@ -3,6 +3,7 @@ package afx.customplayernametags;
 import com.github.retrooper.packetevents.PacketEvents;
 import afx.customplayernametags.command.NametagCommand;
 import afx.customplayernametags.config.ConfigManager;
+import afx.customplayernametags.config.ConfigMigrator;
 import afx.customplayernametags.config.MessageManager;
 import afx.customplayernametags.config.PlayerFormatStore;
 import afx.customplayernametags.listener.PlayerConnectionListener;
@@ -12,6 +13,8 @@ import afx.customplayernametags.placeholder.CustomPlayerNametagsExpansion;
 import afx.customplayernametags.update.UpdateChecker;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import java.io.File;
 
 public final class CustomPlayerNametags extends JavaPlugin {
 
@@ -38,6 +41,7 @@ public final class CustomPlayerNametags extends JavaPlugin {
     public void onEnable() {
         PacketEvents.getAPI().init();
 
+        updateConfigFile();
         saveDefaultConfig();
         this.configManager = new ConfigManager(this);
         this.configManager.load();
@@ -74,6 +78,19 @@ public final class CustomPlayerNametags extends JavaPlugin {
         updateChecker.check(this::logUpdateCheckResult);
 
         getLogger().info("CustomPlayerNametags enabled.");
+    }
+
+    /**
+     * Brings an existing {@code config.yml} up to date with whatever this
+     * jar version bundles — renaming keys that changed name (e.g. the old
+     * {@code plugin-version} field, now {@code config-version}) and adding
+     * any new keys introduced since the server owner last updated — while
+     * preserving their existing values and comments. No-op on a fresh
+     * install, since there's no file yet for {@link #saveDefaultConfig()}
+     * to touch.
+     */
+    public void updateConfigFile() {
+        ConfigMigrator.update(this, new File(getDataFolder(), "config.yml"), "config.yml");
     }
 
     /**

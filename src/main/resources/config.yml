@@ -20,13 +20,14 @@
 # https://wiki.placeholderapi.com/users/using-placeholders/
 #
 # Global format used for all player nametags.
-# Supports PlaceholderAPI placeholders and '&' colors.
+# Supports any PlaceholderAPI placeholder and '&' colors.
+# Use "{player}" for the player's username.
 # Use "\n" in the format to start a new line.
 # Use "/nametags format" to set custom formats for individual players.
 
-# Default: %player_name%
-# Example: "%luckperms_prefix%%essentials_nickname%"
-nametag-format: "%player_name%"
+# Default: {player}
+# Example: "%luckperms_prefix%{player}"
+nametag-format: "{player}"
 # ========================================================================
 
 
@@ -99,5 +100,5 @@ nametag-render-distance: 64
 
 # =================================
 # PLEASE DO NOT CHANGE THIS VALUE!
-plugin-version: 1
+config-version: 1.1
 # =================================

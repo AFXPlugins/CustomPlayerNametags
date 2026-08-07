@@ -21,7 +21,6 @@ no-permission: "&cYou do not have permission to do that."
 reload-success: "&aCustomPlayerNametags reloaded."
 player-not-found: "&cThat player isn't online."
 console-only: "&cThat subcommand is console-only."
-global-format-disabled: "&cThe global nametag format is disabled because PlaceholderAPI isn't installed."
 # --------------------------------------------------------
 
 
@@ -39,7 +38,7 @@ update-checking: "&7Checking Modrinth for updates..."
 update-check-failed: "&cCould not check for updates: {reason}"
 update-available: "&eA new version is available: &av{version} &7(you're running &fv{current}&7). &f{url}"
 update-up-to-date: "&aYou're already running the latest version (v{current})."
-op-update-notice: "&e[CustomPlayerNametags] &fA new version is available: &av{version} &7(you're running v{current}). &f{url}"
+update-notice: "&e[CustomPlayerNametags] &fA new version is available: &av{version} &7(you're running v{current}). &f{url}"
 # -----------------------------------------------------------------------------------------------------------------------------
 
 

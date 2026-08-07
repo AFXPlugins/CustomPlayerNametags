@@ -10,7 +10,7 @@ import java.util.Locale;
 
 public final class ConfigManager {
 
-    private static final String DEFAULT_FORMAT = "%player_name%";
+    private static final String DEFAULT_FORMAT = "{player}";
 
     /** Height (in blocks) the nametag floats above the player. */
     private static final double NAMETAG_HEIGHT_OFFSET = 2.085;
@@ -189,8 +189,8 @@ public final class ConfigManager {
     }
 
     /**
-     * Resets the global {@code nametag-format} back to the default (the
-     * player's plain username). Backs {@code /nametags format reset global}.
+     * Resets the global {@code nametag-format} back to the default
+     * ({@code {player}}). Backs {@code /nametags format reset global}.
      */
     public void resetGlobalFormat() {
         setGlobalFormat(DEFAULT_FORMAT);

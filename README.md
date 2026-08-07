@@ -24,3 +24,4 @@
 ## Permissions
 
 - `customplayernametags.admin` — Allows use of all CustomPlayerNametags commands (default: OP).
+- `customplayernametags.updatenotify` — Receive a message on join when a new plugin update is available (default: OP).

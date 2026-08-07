@@ -1,7 +1,7 @@
 name: CustomPlayerNametags
-version: '1.0.0'
+version: '1.0.1'
 main: afx.customplayernametags.CustomPlayerNametags
-api-version: '26.2'
+api-version: '1.20'
 author: AFXPlugins
 description: >
   Fully customizable player nametags.
@@ -20,4 +20,7 @@ commands:
 permissions:
   customplayernametags.admin:
     description: Allows use of all CustomPlayerNametags commands.
+    default: op
+  customplayernametags.updatenotify:
+    description: Receive a message on join when a new plugin update is available.
     default: op

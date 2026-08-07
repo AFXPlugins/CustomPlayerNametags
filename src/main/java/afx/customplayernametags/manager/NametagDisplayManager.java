@@ -1307,14 +1307,14 @@ public final class NametagDisplayManager {
     /**
      * Number of lines in {@code text} — 1 plus however many literal
      * {@code '\n'} characters appear anywhere in its content (including
-     * children). {@link afx.customplayernametags.manager.NametagManager}
+     * children). {@link NametagManager}
      * turns a hand-typed {@code \n} escape into a real newline character
      * before this ever gets built into a {@link Component}, so a plain
      * character count here is all that's needed — no re-parsing of any
      * escape syntax.
      *
      * <p>Walks the full component tree (not just the root) since {@link
-     * net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer}
+     * LegacyComponentSerializer}
      * splits the text into a tree of child {@link TextComponent}s at every
      * color/formatting change, so a newline immediately after a color code
      * lands in a child node rather than the root.

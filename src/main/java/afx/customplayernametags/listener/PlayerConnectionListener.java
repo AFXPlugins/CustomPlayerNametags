@@ -23,6 +23,8 @@ import java.util.UUID;
 
 public final class PlayerConnectionListener implements Listener {
 
+    private static final String UPDATE_NOTIFY_PERMISSION = "customplayernametags.updatenotify";
+
     private final CustomPlayerNametags plugin;
     private final ConfigManager config;
     private final NametagManager nametagManager;
@@ -56,18 +58,21 @@ public final class PlayerConnectionListener implements Listener {
             nametagManager.refresh(joined, true);
         }, 40L);
 
-        notifyOpOfUpdate(joined);
+        notifyOfUpdate(joined);
     }
 
     /**
-     * Messages an OP on join if a newer plugin version is already known to
-     * be available. Uses whatever {@link UpdateChecker} last found (from
-     * the startup check, or a since-run {@code /nametags update}) rather
-     * than firing a fresh Modrinth request for every join — that result is
-     * cached specifically so this stays free.
+     * Messages a player on join if a newer plugin version is already known
+     * to be available. Gated by {@link #UPDATE_NOTIFY_PERMISSION} rather
+     * than admin/OP status, so who gets pinged about updates can be
+     * configured separately from who can run admin commands. Uses whatever
+     * {@link UpdateChecker} last found (from the startup check, or a
+     * since-run {@code /nametags update}) rather than firing a fresh
+     * Modrinth request for every join — that result is cached specifically
+     * so this stays free.
      */
-    private void notifyOpOfUpdate(Player joined) {
-        if (!joined.isOp()) {
+    private void notifyOfUpdate(Player joined) {
+        if (!joined.hasPermission(UPDATE_NOTIFY_PERMISSION)) {
             return;
         }
         UpdateChecker updateChecker = plugin.getUpdateChecker();
@@ -78,7 +83,7 @@ public final class PlayerConnectionListener implements Listener {
         if (result == null || !result.isUpdateAvailable()) {
             return;
         }
-        messages.send(joined, "op-update-notice",
+        messages.send(joined, "update-notice",
                 "{version}", result.getLatestVersion(),
                 "{current}", plugin.getDescription().getVersion(),
                 "{url}", result.getReleaseUrl());

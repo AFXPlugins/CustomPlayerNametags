@@ -24,8 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>File layout:
  * <pre>
  * formats:
- *   &lt;player-uuid&gt;: '&amp;6VIP &amp;f%player_name%'
- *   &lt;player-uuid&gt;: '%luckperms_prefix%%player_name%'
+ *   &lt;player-uuid&gt;: '&amp;6VIP &amp;f{player}'
+ *   &lt;player-uuid&gt;: '%luckperms_prefix%{player}'
  * </pre>
  * Keyed by UUID (not username) so overrides survive name changes, matching
  * how the rest of the plugin already tracks players.

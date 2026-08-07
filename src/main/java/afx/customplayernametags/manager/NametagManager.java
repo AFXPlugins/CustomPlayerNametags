@@ -48,10 +48,11 @@ public final class NametagManager {
 
     /**
      * Whether the PlaceholderAPI plugin is present and enabled. PlaceholderAPI
-     * is a soft dependency — if it's missing, the global {@code nametag-format}
-     * falls back to plain usernames, but per-player format overrides still
-     * render (with any {@code %placeholder%} left unparsed) instead of
-     * throwing {@link NoClassDefFoundError}.
+     * is a soft dependency — if it's missing, both the global
+     * {@code nametag-format} and any per-player format override still
+     * render, with the built-in {@code {player}} placeholder resolved either
+     * way and any {@code %placeholder%} left unparsed (shown as literal
+     * text) instead of throwing {@link NoClassDefFoundError}.
      */
     private final boolean placeholderApiAvailable;
 
@@ -194,11 +195,24 @@ public final class NametagManager {
         return getEffectiveParsedFormat(target);
     }
 
+    /**
+     * Resolves {@code raw} into final display text: the built-in
+     * {@code {player}} placeholder is substituted with {@code target}'s
+     * username first (so it always works, with or without PlaceholderAPI),
+     * then the result is handed to PlaceholderAPI — but only if it's
+     * actually installed; otherwise any {@code %placeholder%} left in the
+     * string is simply left unparsed rather than attempting to call a class
+     * that isn't there. {@code &} colors are translated last, followed by
+     * {@code \n} line-break substitution.
+     */
     private String parse(Player target, String raw) {
         if (raw == null || raw.isEmpty()) {
             return "";
         }
-        String result = placeholderApiAvailable ? PlaceholderAPI.setPlaceholders(target, raw) : raw;
+        String result = target != null ? raw.replace("{player}", target.getName()) : raw;
+        if (placeholderApiAvailable) {
+            result = PlaceholderAPI.setPlaceholders(target, result);
+        }
         result = ChatColor.translateAlternateColorCodes('&', result);
         return applyLineBreaks(result);
     }
@@ -238,36 +252,20 @@ public final class NametagManager {
     /**
      * Same as {@link #getEffectiveRawFormat(Player)} but resolved with
      * {@code &} colors translated — i.e. exactly what's currently rendered
-     * above {@code target}'s head (falling back to their plain username if
-     * the resolved format is blank, same as the tag itself does). Backs
-     * {@code /nametags format view parsed}.
+     * above {@code target}'s head. Backs {@code /nametags format view
+     * parsed}.
      *
-     * <p>A per-player override (set via {@code /nametags format set player})
-     * always renders, even without PlaceholderAPI — an admin who set a
-     * player-specific format wants to see it, not a silent fallback to their
-     * username. If PlaceholderAPI isn't present, any {@code %placeholder%}
-     * in that override is simply left unparsed (shown as literal text)
-     * rather than resolved. Only the <em>global</em> {@code nametag-format}
-     * requires PlaceholderAPI to render at all, since it's expected to lean
-     * on placeholders more heavily and falling back per-player would be
-     * inconsistent across the whole server.
+     * <p>Both a per-player override (set via {@code /nametags format set
+     * player}) and the global {@code nametag-format} always render, with or
+     * without PlaceholderAPI — the built-in {@code {player}} placeholder is
+     * resolved either way, and any {@code %placeholder%} is simply left
+     * unparsed (shown as literal text) if PlaceholderAPI isn't present,
+     * rather than the whole format being swapped out for a plain username.
      */
     public String getEffectiveParsedFormat(Player target) {
         String override = formatStore.get(target.getUniqueId());
-        if (override != null) {
-            String parsed = parse(target, override);
-            return (parsed == null || parsed.isBlank()) ? target.getName() : parsed;
-        }
-
-        if (!placeholderApiAvailable) {
-            // Without PlaceholderAPI, the global nametag-format can't be
-            // meaningfully resolved — any %placeholders% in it would just
-            // show up as literal text. Skip it entirely and fall back to
-            // the player's plain username instead.
-            return target.getName();
-        }
-        String parsed = parse(target, config.getNametagFormat());
-        return (parsed == null || parsed.isBlank()) ? target.getName() : parsed;
+        String raw = override != null ? override : config.getNametagFormat();
+        return parse(target, raw);
     }
 
     /**
@@ -289,28 +287,20 @@ public final class NametagManager {
     }
 
     /**
-     * Same as {@link #getGlobalParsedFormat()}, but placeholders are resolved
-     * using {@code context} as the PlaceholderAPI subject — so player-only
+     * Same as {@link #getGlobalParsedFormat()}, but the built-in
+     * {@code {player}} placeholder and any PlaceholderAPI placeholders are
+     * resolved using {@code context} as the subject — so player-only
      * placeholders (e.g. {@code %player_name%}) resolve to {@code context}'s
      * values instead of coming back blank or unresolved. Backs
      * {@code /nametags format view global parsed <player>}.
      *
-     * <p>If PlaceholderAPI isn't present, the global {@code nametag-format}
-     * from config.yml is ignored entirely and this returns {@code context}'s
-     * plain username instead — the same fallback the live nametag uses, so
-     * this always shows exactly what players actually see.
+     * <p>Always renders the configured global {@code nametag-format}, with
+     * or without PlaceholderAPI — this always shows exactly what players
+     * actually see, since the live nametag itself no longer falls back to a
+     * plain username when PlaceholderAPI is missing.
      */
     public String getGlobalParsedFormat(Player context) {
-        if (!placeholderApiAvailable) {
-            return context != null ? context.getName() : "";
-        }
-        String raw = getGlobalRawFormat();
-        if (raw == null || raw.isEmpty()) {
-            return "";
-        }
-        String result = PlaceholderAPI.setPlaceholders(context, raw);
-        result = ChatColor.translateAlternateColorCodes('&', result);
-        return applyLineBreaks(result);
+        return parse(context, getGlobalRawFormat());
     }
 
     /**

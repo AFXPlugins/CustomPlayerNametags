@@ -86,6 +86,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
+            plugin.updateConfigFile();
             config.load();
             messages.load();
             nametagManager.stopRefreshTask();
@@ -142,8 +143,8 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
      *       per-player format override for {@code player}, replacing the
      *       global format just for them, and refreshes their tag immediately.</li>
      *   <li>{@code /nametags format reset global} — resets the global
-     *       format back to the default (the player's plain username) and
-     *       refreshes every online player who has no per-player override.</li>
+     *       format back to the default ({@code {player}}) and refreshes
+     *       every online player who has no per-player override.</li>
      *   <li>{@code /nametags format reset player <player>} — clears
      *       {@code player}'s per-player format override, reverting them to
      *       the global {@code nametag-format}, and refreshes their tag
@@ -153,21 +154,13 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
     private boolean handleFormatCommand(CommandSender sender, String label, String[] args) {
         if (args.length >= 2 && args[1].equalsIgnoreCase("view")) {
             if (args.length == 4 && args[2].equalsIgnoreCase("global") && args[3].equalsIgnoreCase("unparsed")) {
-                if (!nametagManager.isPlaceholderApiAvailable()) {
-                    messages.send(sender, "global-format-disabled");
-                    return true;
-                }
                 messages.send(sender, "format-view-global-unparsed-header");
                 sender.sendMessage(nametagManager.getGlobalRawFormat());
                 return true;
             }
 
             if (args.length == 5 && args[2].equalsIgnoreCase("global") && args[3].equalsIgnoreCase("parsed")) {
-                if (!nametagManager.isPlaceholderApiAvailable()) {
-                    messages.send(sender, "global-format-disabled");
-                    return true;
-                }
-                // Parsing needs a player context — PlaceholderAPI can't
+                // Parsing needs a player context — {player} and PlaceholderAPI can't
                 // resolve player-only placeholders otherwise.
                 Player target = Bukkit.getPlayerExact(args[4]);
                 if (target == null) {
@@ -215,10 +208,6 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
 
         if (args.length >= 2 && args[1].equalsIgnoreCase("set")) {
             if (args.length >= 3 && args[2].equalsIgnoreCase("global")) {
-                if (!nametagManager.isPlaceholderApiAvailable()) {
-                    messages.send(sender, "global-format-disabled");
-                    return true;
-                }
                 String newFormat = joinAndUnquote(args, 3);
                 if (newFormat.isEmpty()) {
                     messages.sendList(sender, "usage-format-set", "{label}", label);
@@ -257,10 +246,6 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
 
         if (args.length >= 2 && args[1].equalsIgnoreCase("reset")) {
             if (args.length == 3 && args[2].equalsIgnoreCase("global")) {
-                if (!nametagManager.isPlaceholderApiAvailable()) {
-                    messages.send(sender, "global-format-disabled");
-                    return true;
-                }
                 config.resetGlobalFormat();
                 nametagManager.refreshAll();
                 messages.send(sender, "format-reset-global-success");
