@@ -1,4 +1,4 @@
-package placeholder;
+package afx.customplayernametags.placeholder;
 
 import afx.customplayernametags.CustomPlayerNametags;
 import afx.customplayernametags.manager.NametagManager;
