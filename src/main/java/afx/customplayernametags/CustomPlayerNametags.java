@@ -47,6 +47,7 @@ public final class CustomPlayerNametags extends JavaPlugin {
         this.configManager.load();
 
         this.messageManager = new MessageManager(this);
+        this.messageManager.resetToDefault();
         this.messageManager.load();
 
         this.playerFormatStore = new PlayerFormatStore(this);

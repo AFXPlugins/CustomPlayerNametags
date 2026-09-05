@@ -5,15 +5,13 @@
 #                                         /___/                                     /___/
 
 
-# =================================
-# Reload command: /nametags reload
-# =================================
-
-
 # =============================================================================================================================
 #                                                 CustomPlayerNametags Messages
 # =============================================================================================================================
 
+# =================================================================================
+# Notice: This file is reset every time the server starts and should not be edited.
+# =================================================================================
 
 # General
 # --------------------------------------------------------
@@ -38,7 +36,7 @@ update-checking: "&7Checking Modrinth for updates..."
 update-check-failed: "&cCould not check for updates: {reason}"
 update-available: "&eA new version is available:\n&cv{current} &7-> &av{version}\n&f{url}"
 update-up-to-date: "&aYou're already running the latest version (v{current})."
-update-notice: "&e[CustomPlayerNametags] &fA new version is available: &av{version} &7(you're running v{current}). &f{url}"
+update-notice: "&6[CustomPlayerNametags] &eA new version is available:\n&cv{current} &7-> &av{version}\n&f{url}"
 # -----------------------------------------------------------------------------------------------------------------------------
 
 

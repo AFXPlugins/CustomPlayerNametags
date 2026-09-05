@@ -55,6 +55,11 @@ public final class MessageManager {
         }
     }
 
+    /** Overwrites the on-disk messages.yml with the bundled default. Intended to be called once on server start, before {@link #load()}, so messages.yml resets every time the server starts. */
+    public void resetToDefault() {
+        plugin.saveResource("messages.yml", true);
+    }
+
     private String raw(String key) {
         if (messages != null && messages.isString(key)) {
             return messages.getString(key);
