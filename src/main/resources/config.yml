@@ -4,13 +4,11 @@
 # \___/\_,_/___/\__/\___/_/_/_/_/  /_/\_,_/\_, /\__/_/ /_/|_/\_,_/_/_/_/\__/\__/\_,_/\_, /___/
 #                                         /___/                                     /___/
 
-# Visit the wiki for in-depth information on configuration, commands, and more:
-#  https://afxplugins.github.io/CustomPlayerNametags-Documentation/
 
-
-# =================================
+# ===============================================================================
 # Reload command: /nametags reload
-# =================================
+# Documentation: https://afxplugins.github.io/documentation/customplayernametags/
+# ===============================================================================
 
 
 # ========================================================================
@@ -25,14 +23,14 @@
 # Use "\n" in the format to start a new line.
 # Use "/nametags format" to set custom formats for individual players.
 
-# Default: {player}
-# Example: "%luckperms_prefix%{player}"
+# Default: "{player}"
+# Example: "%luckperms_prefix%%essentials_nickname%"
 nametag-format: "{player}"
 # ========================================================================
 
 
 # ==============================================================================
-#                             NAMETAG DISMOUNTING
+#                             Nametag Dismounting
 # ==============================================================================
 # The nametag is attached to the player using an invisible passenger entity,
 #  keeping it in a fixed position above the player.
@@ -88,6 +86,23 @@ dismount-duration-ticks: 5
 # ==============================================================================
 
 
+# ==============================================================================
+#                                Fine-Tuning
+# ==============================================================================
+# Settings for fine-tuning nametag positions, in blocks.
+# It is recommended to start with increments of +/- 0.1
+
+# Nametag height correction for all players.
+global-nametag-height-adjust: 0
+
+# Extra height correction for nametags rendered through bedrock players.
+bedrock-height-adjust: 0
+
+# Extra sneak correction for nametags rendered through bedrock players.
+bedrock-sneak-height-adjust: 0
+# ==============================================================================
+
+
 # =========================================================================
 #                               Other Options
 # =========================================================================
@@ -98,7 +113,8 @@ nametag-render-distance: 64
 
 
 
+
 # =================================
 # PLEASE DO NOT CHANGE THIS VALUE!
-config-version: 1.1
+config-version: 1.2
 # =================================

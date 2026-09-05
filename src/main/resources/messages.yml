@@ -36,7 +36,7 @@ dismount-invalid-ticks: "&cInvalid tick value: {ticks}"
 update-checker-not-ready: "&cThe update checker isn't ready yet — try again in a moment."
 update-checking: "&7Checking Modrinth for updates..."
 update-check-failed: "&cCould not check for updates: {reason}"
-update-available: "&eA new version is available: &av{version} &7(you're running &fv{current}&7). &f{url}"
+update-available: "&eA new version is available:\n&cv{current} &7-> &av{version}\n&f{url}"
 update-up-to-date: "&aYou're already running the latest version (v{current})."
 update-notice: "&e[CustomPlayerNametags] &fA new version is available: &av{version} &7(you're running v{current}). &f{url}"
 # -----------------------------------------------------------------------------------------------------------------------------

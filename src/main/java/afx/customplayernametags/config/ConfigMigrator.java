@@ -1,6 +1,5 @@
 package afx.customplayernametags.config;
 
-import afx.customplayernametags.config.lib.ConfigUpdater;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -55,15 +54,79 @@ public final class ConfigMigrator {
             // several updates still catches up correctly.
             renameKey(configFile, "plugin-version", "config-version");
 
+            // Step 1b: key removals. bedrock-dismount-height-adjust and
+            // bedrock-line-height-adjust were removed — the former is now
+            // always computed as the opposite of bedrock-height-adjust
+            // internally, and the latter was removed entirely (Bedrock/Geyser
+            // already keeps a multi-line tag's bottom line in the right
+            // place on its own). Strip any leftover lines from existing
+            // installs so they don't linger in config.yml doing nothing.
+            removeKey(configFile, "bedrock-dismount-height-adjust");
+            removeKey(configFile, "bedrock-line-height-adjust");
+
             // Step 2: add anything new. ignoredSections is empty here since
             // nothing in this config needs to be left alone during merges;
             // pass section names (e.g. "messages") if you ever want the
             // updater to leave a whole block as the user configured it.
             List<String> ignoredSections = Collections.emptyList();
             ConfigUpdater.update(plugin, resourceName, configFile, ignoredSections);
+
+            // Step 3: config-version is a "please don't touch" marker, not
+            // a user-tunable option — ConfigUpdater otherwise treats every
+            // key the same way and carries an existing value straight
+            // through, which would leave this permanently stuck at
+            // whatever it was the very first time a server owner's file
+            // was generated. Force it to the bundled jar's value every
+            // time instead, same as version markers in other AFX plugins.
+            forceBundledValue(plugin, resourceName, configFile, "config-version");
         } catch (IOException e) {
             plugin.getLogger().severe("Could not update " + configFile.getName() + ": " + e.getMessage()
                     + ". Delete the file to regenerate it, or fix it manually.");
+        }
+    }
+
+    /**
+     * Overwrites a single top-level {@code key:} line in {@code configFile}
+     * with that same key's line from the bundled {@code resourceName}
+     * inside the jar, regardless of what the on-disk file currently has.
+     * Unlike everything else this class does, this deliberately discards
+     * the user's existing value — only appropriate for a marker the plugin
+     * itself owns (like {@code config-version}), never for an actual
+     * setting. No-ops if either file is missing the key.
+     */
+    private static void forceBundledValue(JavaPlugin plugin, String resourceName, File configFile, String key) throws IOException {
+        String bundledLine = null;
+        try (java.io.InputStream in = plugin.getResource(resourceName)) {
+            if (in == null) {
+                return;
+            }
+            List<String> bundledLines = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(in, StandardCharsets.UTF_8)).lines().collect(java.util.stream.Collectors.toList());
+            Pattern pattern = Pattern.compile("^" + Pattern.quote(key) + "\\s*:.*$");
+            for (String line : bundledLines) {
+                if (pattern.matcher(line).matches()) {
+                    bundledLine = line;
+                    break;
+                }
+            }
+        }
+
+        if (bundledLine == null) {
+            return;
+        }
+
+        List<String> lines = Files.readAllLines(configFile.toPath(), StandardCharsets.UTF_8);
+        Pattern pattern = Pattern.compile("^" + Pattern.quote(key) + "\\s*:.*$");
+        boolean changed = false;
+        for (int i = 0; i < lines.size(); i++) {
+            if (pattern.matcher(lines.get(i)).matches() && !lines.get(i).equals(bundledLine)) {
+                lines.set(i, bundledLine);
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            Files.write(configFile.toPath(), lines, StandardCharsets.UTF_8);
         }
     }
 
@@ -109,6 +172,33 @@ public final class ConfigMigrator {
         if (matcher.matches()) {
             lines.set(matchIndex, newKey + matcher.group(1));
             Files.write(configFile.toPath(), lines, StandardCharsets.UTF_8);
+        }
+    }
+
+    /**
+     * Deletes a top-level {@code key:} line (and its value) from
+     * {@code configFile} entirely, for an option removed in a later release.
+     * No-ops if the key isn't present. Only ever removes the single matching
+     * line itself — any surrounding comments are left as-is (harmless
+     * leftover documentation), which keeps this safe to run against
+     * hand-edited files without guessing which comment block belongs to it.
+     */
+    static void removeKey(File configFile, String key) throws IOException {
+        List<String> lines = Files.readAllLines(configFile.toPath(), StandardCharsets.UTF_8);
+        Pattern pattern = Pattern.compile("^" + Pattern.quote(key) + "\\s*:.*$");
+
+        boolean changed = false;
+        List<String> updated = new java.util.ArrayList<>(lines.size());
+        for (String line : lines) {
+            if (pattern.matcher(line).matches()) {
+                changed = true;
+                continue;
+            }
+            updated.add(line);
+        }
+
+        if (changed) {
+            Files.write(configFile.toPath(), updated, StandardCharsets.UTF_8);
         }
     }
 }

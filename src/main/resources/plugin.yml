@@ -1,5 +1,5 @@
 name: CustomPlayerNametags
-version: '1.0.1'
+version: '1.1.0'
 main: afx.customplayernametags.CustomPlayerNametags
 api-version: '1.20'
 author: AFXPlugins
@@ -14,8 +14,6 @@ commands:
     description: CustomPlayerNametags commands
     usage: /nametags reload | /nametags update | /nametags format view | /nametags format set | /nametags format reset
     aliases: [customplayernametags]
-    permission: customplayernametags.admin
-    permission-message: You do not have permission to use this command.
 
 permissions:
   customplayernametags.admin:

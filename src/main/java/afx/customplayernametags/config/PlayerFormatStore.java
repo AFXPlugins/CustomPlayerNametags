@@ -34,17 +34,9 @@ public final class PlayerFormatStore {
 
     /**
      * Written to {@code player-formats.yml} the first time it's generated
-     * (see {@link #load()}), so an admin who opens the empty file right
-     * after install sees an explanation instead of a blank file.
+     * (see {@link #load()}).
      */
-    private static final String EMPTY_FILE_HEADER =
-            "# Per-player nametag-format overrides, set via /nametags format set player.\n"
-                    + "# Managed automatically -- entries are added/removed by that command (and\n"
-                    + "# /nametags format reset player), keyed by player UUID rather than username\n"
-                    + "# so overrides survive name changes. You normally shouldn't need to hand-edit\n"
-                    + "# this file.\n"
-                    + "\n"
-                    + "formats: {}\n";
+    private static final String EMPTY_FILE_HEADER = "formats: {}\n";
 
     private final CustomPlayerNametags plugin;
     private final File file;

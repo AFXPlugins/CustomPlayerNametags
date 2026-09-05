@@ -12,9 +12,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -113,12 +112,16 @@ public final class NametagManager {
         if (displayManager != null) {
             displayManager.shutdown();
         }
-        // Remove hide-teams for everyone still online.
-        List<Player> viewers = new ArrayList<>(Bukkit.getOnlinePlayers());
+        // Remove hide-teams for everyone still online. Bukkit.getOnlinePlayers()
+        // is iterated directly (no defensive copy needed here — nothing else
+        // mutates the online-player set from another thread while this runs
+        // synchronously on the main thread during shutdown).
+        Collection<? extends Player> viewers = Bukkit.getOnlinePlayers();
         for (UUID uuid : states.keySet()) {
             removeHideTeam(uuid, viewers);
         }
         states.clear();
+        BedrockDetector.clearAll();
     }
 
     public void refreshAll() {
@@ -137,7 +140,12 @@ public final class NametagManager {
         if (displayManager != null) {
             displayManager.remove(uuid);
         }
-        removeHideTeam(uuid, new ArrayList<>(Bukkit.getOnlinePlayers()));
+        removeHideTeam(uuid, Bukkit.getOnlinePlayers());
+        // The player's client type can never change mid-session, but a
+        // future rejoin could come from a different client entirely — drop
+        // the cached result so BedrockDetector recomputes it next time
+        // rather than ever risking a stale answer across reconnects.
+        BedrockDetector.forget(uuid);
     }
 
     // ------------------------------------------------------------------
@@ -159,7 +167,17 @@ public final class NametagManager {
         PlayerState newState = new PlayerState(fullText);
         states.put(target.getUniqueId(), newState);
 
-        List<Player> viewers = new ArrayList<>(Bukkit.getOnlinePlayers());
+        // Iterate Bukkit's own online-player collection directly instead of
+        // copying it into a fresh ArrayList on every call. This method runs
+        // once per online player every REFRESH_INTERVAL_TICKS, and used to
+        // allocate an O(players)-sized list every single time any player's
+        // resolved text changed (e.g. from a placeholder like ping or a
+        // scoreboard value that updates continuously) — an O(players^2)
+        // allocation/copy cost per refresh cycle on a populated server with
+        // any dynamic placeholders in use. Bukkit.getOnlinePlayers() is a
+        // safe, already-immutable view to iterate directly here since
+        // nothing below mutates it and this always runs on the main thread.
+        Collection<? extends Player> viewers = Bukkit.getOnlinePlayers();
 
         // Ensure a team exists that hides the vanilla nametag.
         if (previous == null) {
@@ -376,7 +394,7 @@ public final class NametagManager {
         }
     }
 
-    private void createHideTeam(Player target, List<Player> viewers) {
+    private void createHideTeam(Player target, Collection<? extends Player> viewers) {
         // Roster uses the real username so every client type matches.
         WrapperPlayServerTeams packet = new WrapperPlayServerTeams(
                 teamName(target.getUniqueId()),
@@ -389,7 +407,7 @@ public final class NametagManager {
         }
     }
 
-    private void removeHideTeam(UUID target, List<Player> viewers) {
+    private void removeHideTeam(UUID target, Collection<? extends Player> viewers) {
         WrapperPlayServerTeams packet = new WrapperPlayServerTeams(
                 teamName(target),
                 WrapperPlayServerTeams.TeamMode.REMOVE,
