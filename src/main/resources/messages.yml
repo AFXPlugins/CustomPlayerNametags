@@ -88,6 +88,8 @@ usage-format-set:
   - "&cUsages:"
   - "&f/{label} format set global &6<&fformat&6> &e- Set the global nametag format."
   - "&f/{label} format set player &6<&fplayer&6> &6<&fformat&6> &e- Set a player's nametag format."
+
+usage-format-reset:
   - "&cUsages:"
   - "&f/{label} format reset global &e- Reset the global nametag format to default."
   - "&f/{label} format reset player &6<&fplayer&6> &e- Reset a player's nametag format."
