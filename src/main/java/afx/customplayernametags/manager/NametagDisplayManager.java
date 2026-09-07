@@ -123,7 +123,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *       approximation rather than truly per-viewer. Bedrock/Geyser viewers
  *       always see the tag occluded by blocks like vanilla.</li>
  *   <li><b>Sneaking:</b> text colors darkened (component rewrite), reduced
- *       opacity, and per-viewer line-of-sight checks so the tag stays visible
+ *       dimmed text color, and per-viewer line-of-sight checks so the tag stays visible
  *       in the open but is hidden when a wall blocks the view. Works for both
  *       Java and Bedrock viewers without respawning the entity.</li>
  * </ul>
@@ -236,16 +236,18 @@ public final class NametagDisplayManager {
      */
 
     /**
-     * Fully opaque text. Use 255 (not the API's -1 sentinel) so Geyser/Bedrock
-     * also renders solid text while standing — Geyser has been observed to
-     * leave tags semi-transparent when opacity is left at -1.
+     * Keep TextDisplay opacity fixed.
+     *
+     * <p>{@code text_opacity} is an interpolated Display property. Changing
+     * it at the same time as the crouch/stand transformation can therefore
+     * make the client interpolate the text alpha as part of the same display
+     * interpolation, which causes the grey/white flash and temporary
+     * disappearance seen during pose changes. Crouch dimming is handled by
+     * {@link #dim} instead, so the alpha never changes during a pose toggle.
      */
     private static final byte OPACITY_STANDING = (byte) 255;
 
-    /**
-     * Dimmed text opacity while sneaking (~40% alpha). Combined with
-     * {@link #dim} so Java and Bedrock get the same dull crouch look.
-     */
+    /** Dimmed text opacity while sneaking (~40% alpha), matching the previous behavior. */
     private static final byte OPACITY_SNEAKING = (byte) 100;
 
     /**
@@ -775,7 +777,7 @@ public final class NametagDisplayManager {
             // Must be set here (pre-track) so Java clients receive see_through
             // on the spawn metadata packet. Later in-place changes are ignored.
             entity.setSeeThrough(effectiveSeeThrough(sneaking, anyJavaViewerOccluded(owner)));
-            entity.setTextOpacity(sneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
+            entity.setTextOpacity(OPACITY_STANDING);
         });
     }
 
@@ -828,11 +830,15 @@ public final class NametagDisplayManager {
         }
         Component javaText = sneaking ? dim(bright, false) : bright;
         Component bedrockText = sneaking ? dim(bright, true) : bright;
-        byte opacity = sneaking ? OPACITY_SNEAKING : OPACITY_STANDING;
         pair.javaDisplay.text(javaText);
-        pair.javaDisplay.setTextOpacity(opacity);
         pair.bedrockDisplay.text(bedrockText);
-        pair.bedrockDisplay.setTextOpacity(opacity);
+
+        // Keep the same crouching transparency as the original behavior,
+        // but apply it with interpolation disabled so a periodic placeholder
+        // refresh can never fade the text or interfere with the height ease.
+        pair.javaDisplay.setInterpolationDelay(0);
+        pair.javaDisplay.setInterpolationDuration(0);
+        pair.javaDisplay.setTextOpacity(sneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
     }
 
     /**
@@ -853,8 +859,8 @@ public final class NametagDisplayManager {
      * Applies standing-vs-sneaking appearance on both custom TextDisplays.
      * Always keeps the configured format (never falls back to the raw username).
      *
-     * <p>Crouch: grey text + reduced opacity + LOS occlusion for Bedrock viewers.
-     * Standing: full-colour text + full opacity + wall-occlusion-gated see-through.
+     * <p>Crouch: grey text + LOS occlusion for Bedrock viewers.
+     * Standing: full-colour text + wall-occlusion-gated see-through.
      *
      * <p>The height change itself is a {@link Transformation} ease on the
      * already-mounted passengers — never a position teleport — so there's
@@ -874,64 +880,70 @@ public final class NametagDisplayManager {
 
         Component javaText = sneaking ? dim(bright, false) : bright;
         Component bedrockText = sneaking ? dim(bright, true) : bright;
-        byte opacity = sneaking ? OPACITY_SNEAKING : OPACITY_STANDING;
         boolean occluded = anyJavaViewerOccluded(owner);
 
-        applySneakStateToOne(pair.javaDisplay, javaText, opacity, sneaking, false, occluded);
-        applySneakStateToOne(pair.bedrockDisplay, bedrockText, opacity, sneaking, true, occluded);
+        applySneakStateToOne(pair.javaDisplay, javaText, sneaking, false, occluded);
+        applySneakStateToOne(pair.bedrockDisplay, bedrockText, sneaking, true, occluded);
 
         applyViewerVisibility(owner, pair, sneaking);
     }
 
-    private void applySneakStateToOne(TextDisplay display, Component text, byte opacity,
+    private void applySneakStateToOne(TextDisplay display, Component text,
                                       boolean sneaking, boolean forBedrockViewer, boolean occluded) {
         display.setSeeThrough(effectiveSeeThrough(sneaking, occluded));
 
         if (forBedrockViewer) {
             display.text(text);
-            display.setTextOpacity(opacity);
+            display.setTextOpacity(sneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
             snapBedrockHeight(display, buildTransformation(sneaking, true));
             return;
         }
 
-        if (sneaking) {
-            // Going into a crouch: text/opacity dim together with the
-            // height ease, as before — only the uncrouch case below needed
-            // to change.
-            display.text(text);
-            display.setTextOpacity(opacity);
-            display.setInterpolationDelay(0);
-            display.setInterpolationDuration(HEIGHT_TRANSITION_TICKS);
-            display.setTransformation(buildTransformation(true, false));
-            return;
-        }
-
-        // Uncrouching: Display entities generically interpolate whichever
-        // fields actually changed in a metadata update once
-        // interpolation_duration is >0 for that update — not just the
-        // transformation. Text/opacity were being bundled into the very
-        // same update as the height-ease transformation below, so a Java
-        // viewer saw the color lerp back to full brightness over
-        // HEIGHT_TRANSITION_TICKS right along with the height, instead of
-        // snapping back immediately.
-        //
-        // Fix: send the text/opacity change on its own first, with
-        // interpolation_duration forced to 0 so the client applies it
-        // instantly, then apply the height ease as a *separate* metadata
-        // update one tick later. By the time that second update goes out,
-        // text/opacity are already unchanged (nothing left to interpolate),
-        // so only the height actually eases.
-        display.setInterpolationDelay(0);
-        display.setInterpolationDuration(0);
+        // Text content is not an interpolated Display property, so it can
+        // be swapped immediately without any risk of it being dragged into
+        // the height ease below.
         display.text(text);
-        display.setTextOpacity(opacity);
 
+        // Apply the height ease now, this tick, with its own duration.
+        display.setInterpolationDelay(0);
+        display.setInterpolationDuration(HEIGHT_TRANSITION_TICKS);
+        display.setTransformation(buildTransformation(sneaking, false));
+
+        // text_opacity IS an interpolated Display property. If it were set
+        // here too, in the same tick as the Transformation above, both
+        // changes go out to the client in the same metadata packet — and
+        // Minecraft interpolates every dirty interpolated field in a packet
+        // over the SAME duration, regardless of what duration was set
+        // before each individual field was touched. Explicitly resetting
+        // duration to 0 right before setting opacity doesn't help, because
+        // it's the duration in effect when the packet is actually flushed
+        // (after this method returns) that applies to the whole packet, not
+        // whatever duration happened to be set at the moment a given field
+        // was written.
+        //
+        // Worse, OPACITY_STANDING is the sentinel value -1/255, which tells
+        // the client "fully opaque, ignore this field" rather than being a
+        // normal interpolatable alpha level. Interpolating into or out of
+        // that sentinel over several ticks doesn't fade smoothly — it makes
+        // the text render as fully see-through for the ticks in between,
+        // which is exactly the "text disappears, then pops back once the
+        // tag stops moving" glitch this caused.
+        //
+        // The fix is to never let the opacity change share a packet with
+        // the Transformation change at all: defer it to the very next tick,
+        // by which point the Transformation field is no longer dirty, so
+        // the opacity packet contains nothing else for the client to
+        // interpolate. That lands one tick (50ms) after the toggle —
+        // imperceptible — and applies instantly, with no fade and no
+        // flicker either way.
+        byte targetOpacity = sneaking ? OPACITY_SNEAKING : OPACITY_STANDING;
         Bukkit.getScheduler().runTask(plugin, () -> {
-            if (display.isValid()) {
-                display.setInterpolationDelay(0);
-                display.setInterpolationDuration(HEIGHT_TRANSITION_TICKS);
-                display.setTransformation(buildTransformation(false, false));
+            if (!display.isValid()) {
+                return;
             }
+            display.setInterpolationDelay(0);
+            display.setInterpolationDuration(0);
+            display.setTextOpacity(targetOpacity);
         });
     }
 
