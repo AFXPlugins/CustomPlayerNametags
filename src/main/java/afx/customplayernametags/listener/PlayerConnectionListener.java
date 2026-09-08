@@ -17,6 +17,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import org.bukkit.event.player.PlayerToggleSneakEvent;
 
 import java.util.List;
 import java.util.UUID;
@@ -215,6 +216,38 @@ public final class PlayerConnectionListener implements Listener {
                 nametagManager.refresh(player, true);
             }
         });
+    }
+
+    /**
+     * Reacts to a crouch/uncrouch the instant the client's toggle packet is
+     * processed, instead of waiting for {@link NametagDisplayManager}'s
+     * once-a-tick poll ({@code tickMaintain}) to notice
+     * {@code player.isSneaking()} changed on its own. Both paths end up
+     * calling the exact same {@link NametagManager#refresh} ->
+     * {@link NametagDisplayManager#update} -> {@code applySneakState}
+     * pipeline; this just fires it the moment the event is handled rather
+     * than on {@code tickMaintain}'s next pass, shaving off up to one full
+     * tick (50ms) of pure server-side polling latency before the
+     * height/opacity/text change goes out. {@code ignoreCancelled = true}
+     * skips this if another plugin cancelled the toggle, since the
+     * player's pose isn't actually changing in that case (letting
+     * {@code tickMaintain} stay the single source of truth for that
+     * outcome).
+     *
+     * <p>Note: this closes the gap on the plugin's own detection latency
+     * only. For Bedrock/Geyser viewers specifically, Geyser does not
+     * forward a Display entity's {@code interpolation_delay} /
+     * {@code interpolation_duration} metadata to the Bedrock client at all
+     * (those translators are no-ops in Geyser's entity definitions — only
+     * the raw translation vector is forwarded), so any remaining smoothing
+     * a Bedrock player sees on the height change is Geyser/Bedrock-side
+     * client interpolation of that translation update, not something this
+     * plugin's {@code snapBedrockHeight} (which already sets both to 0) can
+     * influence further.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onToggleSneak(PlayerToggleSneakEvent event) {
+        nametagManager.refresh(event.getPlayer(), false);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

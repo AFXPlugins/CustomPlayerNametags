@@ -255,6 +255,18 @@ public final class ConfigManager {
     }
 
     /**
+     * Raw {@code bedrock-height-adjust} value as configured in config.yml,
+     * without {@link #BAKED_IN_BEDROCK_HEIGHT_ADJUST} added in. Exposed
+     * only for the bStats custom chart in
+     * {@link afx.customplayernametags.CustomPlayerNametags#onEnable()},
+     * which wants to know what a server owner actually configured, not the
+     * effective value that also includes the built-in constant.
+     */
+    public double getBedrockHeightAdjustConfig() {
+        return bedrockHeightAdjustConfig;
+    }
+
+    /**
      * Extra height added on top of {@link #getBedrockHeightAdjust()} when a
      * Bedrock/Geyser viewer is looking at a sneaking player's tag (any
      * owner platform), since the Java/Bedrock rendering gap doesn't
@@ -268,6 +280,17 @@ public final class ConfigManager {
      */
     public double getBedrockSneakHeightAdjust() {
         return BAKED_IN_BEDROCK_SNEAK_HEIGHT_ADJUST + bedrockSneakHeightAdjustConfig;
+    }
+
+    /**
+     * Raw {@code bedrock-sneak-height-adjust} value as configured in
+     * config.yml, without {@link #BAKED_IN_BEDROCK_SNEAK_HEIGHT_ADJUST}
+     * added in. Exposed only for the bStats custom chart in
+     * {@link afx.customplayernametags.CustomPlayerNametags#onEnable()} —
+     * see {@link #getBedrockHeightAdjustConfig()}.
+     */
+    public double getBedrockSneakHeightAdjustConfig() {
+        return bedrockSneakHeightAdjustConfig;
     }
 
     /**

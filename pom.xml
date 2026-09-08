@@ -6,7 +6,7 @@
 
     <groupId>dev.customplayernametags</groupId>
     <artifactId>CustomPlayerNametags</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -63,6 +63,14 @@
             <version>2.2.5-SNAPSHOT</version>
             <scope>provided</scope>
         </dependency>
+
+        <!-- bStats: anonymous usage metrics, gated behind metrics-enabled in config.yml -->
+        <dependency>
+            <groupId>org.bstats</groupId>
+            <artifactId>bstats-bukkit</artifactId>
+            <version>3.2.1</version>
+            <scope>compile</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -80,6 +88,19 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
                 <version>3.5.1</version>
+                <configuration>
+                    <!-- bStats must be relocated: it's a shared class shaded into many
+                         plugins, and without relocating it into our own package, loading
+                         two plugins that both bundle org.bstats on the same server can
+                         throw off which one each plugin's Metrics instance is actually
+                         reporting for. -->
+                    <relocations>
+                        <relocation>
+                            <pattern>org.bstats</pattern>
+                            <shadedPattern>afx.customplayernametags.libs.bstats</shadedPattern>
+                        </relocation>
+                    </relocations>
+                </configuration>
                 <executions>
                     <execution>
                         <phase>package</phase>

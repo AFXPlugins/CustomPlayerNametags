@@ -132,7 +132,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * change on an already-attached passenger (not a position teleport), the
  * crouch/uncrouch height change can never produce the "spawns high, glides
  * down" glitch older teleport-based approaches had to work around — the
- * passenger relationship itself is untouched, only the local offset eases.
+ * passenger relationship itself is untouched, only the local offset snaps
+ * to its new value (instantly, on both platforms — see
+ * {@link #snapHeight}).
  */
 public final class NametagDisplayManager {
 
@@ -172,20 +174,6 @@ public final class NametagDisplayManager {
      */
     private static final double STANDING_EYE_HEIGHT = 1.62;
     private static final double SNEAK_EYE_HEIGHT = 1.27;
-
-    /**
-     * How many ticks the crouch↔stand height change eases over for
-     * {@code javaDisplay}, via a native {@link
-     * Display#setInterpolationDuration(int)} transformation ease. Unrelated
-     * to position tracking (which the passenger relationship handles for
-     * free), so it only plays when the owner's sneak state actually flips,
-     * not on every movement tick.
-     *
-     * <p>{@code bedrockDisplay} does not use this at all — see
-     * {@link #snapBedrockHeight} for why Bedrock viewers get an instant
-     * height change instead of an eased one.
-     */
-    private static final int HEIGHT_TRANSITION_TICKS = 4;
 
     /**
      * How often (in ticks) {@link #tickMaintain} re-checks render-distance
@@ -835,7 +823,7 @@ public final class NametagDisplayManager {
 
         // Keep the same crouching transparency as the original behavior,
         // but apply it with interpolation disabled so a periodic placeholder
-        // refresh can never fade the text or interfere with the height ease.
+        // refresh can never fade the text.
         pair.javaDisplay.setInterpolationDelay(0);
         pair.javaDisplay.setInterpolationDuration(0);
         pair.javaDisplay.setTextOpacity(sneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
@@ -862,7 +850,7 @@ public final class NametagDisplayManager {
      * <p>Crouch: grey text + LOS occlusion for Bedrock viewers.
      * Standing: full-colour text + wall-occlusion-gated see-through.
      *
-     * <p>The height change itself is a {@link Transformation} ease on the
+     * <p>The height change itself is a {@link Transformation} snap on the
      * already-mounted passengers — never a position teleport — so there's
      * nothing for it to glitch against.
      */
@@ -888,63 +876,25 @@ public final class NametagDisplayManager {
         applyViewerVisibility(owner, pair, sneaking);
     }
 
+    /**
+     * Both viewer platforms now get an instant, unanimated height snap on
+     * crouch/uncrouch — Java used to ease this over a few ticks via native
+     * {@code interpolation_duration}, but that ease is exactly what read as
+     * a small "delay" before the tag finished moving, so it was dropped in
+     * favor of the same zero-duration snap {@link #snapHeight} already used
+     * for Bedrock (see that method's history for why Bedrock could never
+     * use a real ease to begin with). Since neither platform interpolates
+     * anything here anymore, text, height, and opacity can all be set
+     * together in one call with nothing to race or share a packet's
+     * interpolation duration with — no deferred next-tick opacity step
+     * needed either.
+     */
     private void applySneakStateToOne(TextDisplay display, Component text,
                                       boolean sneaking, boolean forBedrockViewer, boolean occluded) {
         display.setSeeThrough(effectiveSeeThrough(sneaking, occluded));
-
-        if (forBedrockViewer) {
-            display.text(text);
-            display.setTextOpacity(sneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
-            snapBedrockHeight(display, buildTransformation(sneaking, true));
-            return;
-        }
-
-        // Text content is not an interpolated Display property, so it can
-        // be swapped immediately without any risk of it being dragged into
-        // the height ease below.
         display.text(text);
-
-        // Apply the height ease now, this tick, with its own duration.
-        display.setInterpolationDelay(0);
-        display.setInterpolationDuration(HEIGHT_TRANSITION_TICKS);
-        display.setTransformation(buildTransformation(sneaking, false));
-
-        // text_opacity IS an interpolated Display property. If it were set
-        // here too, in the same tick as the Transformation above, both
-        // changes go out to the client in the same metadata packet — and
-        // Minecraft interpolates every dirty interpolated field in a packet
-        // over the SAME duration, regardless of what duration was set
-        // before each individual field was touched. Explicitly resetting
-        // duration to 0 right before setting opacity doesn't help, because
-        // it's the duration in effect when the packet is actually flushed
-        // (after this method returns) that applies to the whole packet, not
-        // whatever duration happened to be set at the moment a given field
-        // was written.
-        //
-        // Worse, OPACITY_STANDING is the sentinel value -1/255, which tells
-        // the client "fully opaque, ignore this field" rather than being a
-        // normal interpolatable alpha level. Interpolating into or out of
-        // that sentinel over several ticks doesn't fade smoothly — it makes
-        // the text render as fully see-through for the ticks in between,
-        // which is exactly the "text disappears, then pops back once the
-        // tag stops moving" glitch this caused.
-        //
-        // The fix is to never let the opacity change share a packet with
-        // the Transformation change at all: defer it to the very next tick,
-        // by which point the Transformation field is no longer dirty, so
-        // the opacity packet contains nothing else for the client to
-        // interpolate. That lands one tick (50ms) after the toggle —
-        // imperceptible — and applies instantly, with no fade and no
-        // flicker either way.
-        byte targetOpacity = sneaking ? OPACITY_SNEAKING : OPACITY_STANDING;
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            if (!display.isValid()) {
-                return;
-            }
-            display.setInterpolationDelay(0);
-            display.setInterpolationDuration(0);
-            display.setTextOpacity(targetOpacity);
-        });
+        snapHeight(display, buildTransformation(sneaking, forBedrockViewer));
+        display.setTextOpacity(sneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
     }
 
     /**
@@ -1005,23 +955,28 @@ public final class NametagDisplayManager {
     }
 
     /**
-     * Sets {@code display} (the Bedrock-viewer entity) straight to
-     * {@code target}'s height with no animation at all, unlike
-     * {@code javaDisplay} which eases via native {@code interpolation_duration}
-     * metadata in {@link #applySneakStateToOne}.
+     * Sets {@code display} straight to {@code target}'s height with no
+     * animation at all — used for both {@code javaDisplay} and
+     * {@code bedrockDisplay} now.
      *
-     * <p>An earlier version of this tried to fake that same ease for Bedrock
-     * by manually stepping the translation once per tick over several ticks,
-     * to work around Geyser not reliably carrying native Display
-     * interpolation through intact. That made things worse, not better: a
-     * Bedrock client doesn't tween between those manual per-tick updates the
-     * way it would a single interpolated change, so each step rendered as
-     * its own separate, independent pop — four visible jumps in quick
-     * succession instead of one. A single flat update is the only version of
-     * this that actually looks clean on Bedrock: one instant, correct snap,
-     * with nothing in between to stutter on.
+     * <p>Bedrock never had a choice here: an earlier version tried to fake
+     * a smooth ease for it by manually stepping the translation once per
+     * tick over several ticks, to work around Geyser not reliably carrying
+     * native Display interpolation through intact. That made things worse,
+     * not better — a Bedrock client doesn't tween between those manual
+     * per-tick updates the way it would a single interpolated change, so
+     * each step rendered as its own separate, independent pop, several
+     * visible jumps in quick succession instead of one. A single flat
+     * update is the only version of this that looks clean on Bedrock: one
+     * instant, correct snap, with nothing in between to stutter on.
+     *
+     * <p>Java could do a real native ease here instead (and used to, over a
+     * few ticks via {@code interpolation_duration}), but that ease is what
+     * read as a small delay before the tag finished moving on crouch —
+     * so Java now gets the exact same instant snap Bedrock always needed,
+     * trading the smoothing for zero perceived lag on both platforms.
      */
-    private void snapBedrockHeight(TextDisplay display, Transformation target) {
+    private void snapHeight(TextDisplay display, Transformation target) {
         display.setInterpolationDelay(0);
         display.setInterpolationDuration(0);
         display.setTransformation(target);
