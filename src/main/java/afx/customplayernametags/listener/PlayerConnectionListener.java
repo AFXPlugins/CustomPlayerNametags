@@ -3,9 +3,14 @@ package afx.customplayernametags.listener;
 import afx.customplayernametags.CustomPlayerNametags;
 import afx.customplayernametags.config.ConfigManager;
 import afx.customplayernametags.config.MessageManager;
+import afx.customplayernametags.manager.MultiverseIntegration;
 import afx.customplayernametags.manager.NametagDisplayManager;
 import afx.customplayernametags.manager.NametagManager;
 import afx.customplayernametags.update.UpdateChecker;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -25,6 +30,15 @@ import java.util.UUID;
 public final class PlayerConnectionListener implements Listener {
 
     private static final String UPDATE_NOTIFY_PERMISSION = "customplayernametags.updatenotify";
+    private static final String MULTIVERSE_NOTIFY_PERMISSION = "customplayernametags.multiversenotify";
+    private static final String MULTIVERSE_PASSENGER_MODE_FIX_COMMAND =
+            "/mv config passenger-mode dismount_passengers";
+    /**
+     * Delay, in ticks, before the Multiverse passenger-mode join notice is sent — after the
+     * update notice and clear of the initial burst of other join-time messages/events, so it
+     * doesn't get lost among them and reads as its own, separate notice to the admin.
+     */
+    private static final long MULTIVERSE_NOTIFY_DELAY_TICKS = 5L;
 
     private final CustomPlayerNametags plugin;
     private final ConfigManager config;
@@ -60,6 +74,16 @@ public final class PlayerConnectionListener implements Listener {
         }, 40L);
 
         notifyOfUpdate(joined);
+
+        // Deferred a few ticks so it doesn't compete with everything else already
+        // firing at the instant of join (the update notice above, other plugins'
+        // own join messages, etc.) and reads as its own, separate notice.
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!joined.isOnline()) {
+                return;
+            }
+            notifyOfMultiversePassengerMode(joined);
+        }, MULTIVERSE_NOTIFY_DELAY_TICKS);
     }
 
     /**
@@ -88,6 +112,59 @@ public final class PlayerConnectionListener implements Listener {
                 "{version}", result.getLatestVersion(),
                 "{current}", plugin.getDescription().getVersion(),
                 "{url}", result.getReleaseUrl());
+    }
+
+    /**
+     * Warns an admin on join if Multiverse-Portals is installed, Multiverse-Core's
+     * {@code teleport.passenger-mode} config value is still the out-of-the-box
+     * {@code default} setting, which can let a nametag's passenger entity block
+     * Multiverse-Portals from teleporting a player instead of this plugin's own
+     * dismount handling (see {@link #onCommand} and {@link #onTeleport}) taking
+     * care of it first. Multiverse-Portals is what's actually affected by this,
+     * so the notice is skipped entirely on a server running Multiverse-Core
+     * without it. The message ends with a separate clickable line: clicking it
+     * runs {@value #MULTIVERSE_PASSENGER_MODE_FIX_COMMAND} as the admin
+     * themselves (not the console), so it only succeeds if they actually hold
+     * Multiverse-Core's {@code multiverse.core.config} permission — exactly as
+     * if they'd typed the command by hand.
+     *
+     * <p>Gated by {@link #MULTIVERSE_NOTIFY_PERMISSION} rather than
+     * admin/OP status, matching {@link #notifyOfUpdate}, so who gets
+     * pinged about this can be configured independently of who can run
+     * this plugin's own admin commands. Also gated by
+     * {@code notify-multiverse-passenger-mode-default} in config.yml
+     * (default {@code true}), so a server owner can turn this notice off
+     * entirely — e.g. once they've already fixed it or deliberately want
+     * {@code passenger-mode} left at {@code default}.
+     */
+    private void notifyOfMultiversePassengerMode(Player joined) {
+        if (!config.isNotifyMultiversePassengerModeDefault()) {
+            return;
+        }
+        if (!joined.hasPermission(MULTIVERSE_NOTIFY_PERMISSION)) {
+            return;
+        }
+        if (!MultiverseIntegration.isPortalsAvailable()) {
+            return;
+        }
+        if (!MultiverseIntegration.isPassengerModeDefault()) {
+            return;
+        }
+
+        // MessageManager#get() already runs '&' color codes through
+        // ChatColor.translateAlternateColorCodes, so what comes back here
+        // uses real '§' section-sign codes — legacySection(), not
+        // legacyAmpersand(), is the serializer that understands those.
+        Component notice = LegacyComponentSerializer.legacySection()
+                .deserialize(messages.get("multiverse-passenger-mode-notice"));
+        Component click = LegacyComponentSerializer.legacySection()
+                .deserialize(messages.get("multiverse-passenger-mode-click"))
+                .clickEvent(ClickEvent.runCommand(MULTIVERSE_PASSENGER_MODE_FIX_COMMAND))
+                .hoverEvent(HoverEvent.showText(LegacyComponentSerializer.legacySection()
+                        .deserialize(messages.get("multiverse-passenger-mode-click-hover"))));
+
+        joined.sendMessage(notice);
+        joined.sendMessage(click);
     }
 
     private void applyJoinNametags(Player joined) {
@@ -247,7 +324,19 @@ public final class PlayerConnectionListener implements Listener {
      */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onToggleSneak(PlayerToggleSneakEvent event) {
-        nametagManager.refresh(event.getPlayer(), false);
+        // Deferred by a tick on purpose: the server only applies the new
+        // pose after this event finishes, so Player#isSneaking() — which
+        // the whole refresh -> update -> applySneakState path reads — still
+        // reports the OLD value while the handler is running. Refreshing
+        // synchronously here would therefore re-render the tag in the pose
+        // it was already in and change nothing, leaving tickMaintain's poll
+        // to catch the real change a tick later anyway.
+        Player player = event.getPlayer();
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (player.isOnline()) {
+                nametagManager.refresh(player, false);
+            }
+        });
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

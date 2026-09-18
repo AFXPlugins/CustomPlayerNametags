@@ -2,12 +2,22 @@ package afx.customplayernametags;
 
 import com.github.retrooper.packetevents.PacketEvents;
 import afx.customplayernametags.command.NametagCommand;
+import afx.customplayernametags.command.PlayerNametagCommand;
 import afx.customplayernametags.config.ConfigManager;
 import afx.customplayernametags.config.ConfigMigrator;
+import afx.customplayernametags.config.EditorPlaceholderStore;
+import afx.customplayernametags.config.GuiConfigManager;
+import afx.customplayernametags.config.GroupFormatStore;
 import afx.customplayernametags.config.MessageManager;
+import afx.customplayernametags.config.NametagVisibilityStore;
 import afx.customplayernametags.config.PlayerFormatStore;
+import afx.customplayernametags.config.PlayerWidgetFillStore;
+import afx.customplayernametags.format.TemplateMarkers;
+import afx.customplayernametags.listener.NametagEditorListener;
 import afx.customplayernametags.listener.PlayerConnectionListener;
+import afx.customplayernametags.manager.MultiverseIntegration;
 import afx.customplayernametags.manager.NametagDisplayManager;
+import afx.customplayernametags.manager.NametagEditorManager;
 import afx.customplayernametags.manager.NametagManager;
 import afx.customplayernametags.placeholder.CustomPlayerNametagsExpansion;
 import afx.customplayernametags.update.UpdateChecker;
@@ -43,13 +53,19 @@ public final class CustomPlayerNametags extends JavaPlugin {
      * as a plain decimal number with no leading zero — a leading zero
      * makes Java read it as octal instead, silently changing the value.
      */
-    private static final int BSTATS_PLUGIN_ID = 0;
+    private static final int BSTATS_PLUGIN_ID = 33912;
 
     private ConfigManager configManager;
+    private GuiConfigManager guiConfigManager;
     private MessageManager messageManager;
     private PlayerFormatStore playerFormatStore;
+    private PlayerWidgetFillStore playerWidgetFillStore;
+    private GroupFormatStore groupFormatStore;
+    private EditorPlaceholderStore editorPlaceholderStore;
+    private NametagVisibilityStore nametagVisibilityStore;
     private NametagManager nametagManager;
     private NametagDisplayManager displayManager;
+    private NametagEditorManager nametagEditorManager;
     private UpdateChecker updateChecker;
     private Metrics metrics;
 
@@ -76,10 +92,27 @@ public final class CustomPlayerNametags extends JavaPlugin {
         this.messageManager.resetToDefault();
         this.messageManager.load();
 
+        this.guiConfigManager = new GuiConfigManager(this);
+        this.guiConfigManager.resetToDefault();
+        this.guiConfigManager.load();
+
         this.playerFormatStore = new PlayerFormatStore(this);
         this.playerFormatStore.load();
 
-        this.nametagManager = new NametagManager(this, configManager, playerFormatStore);
+        this.playerWidgetFillStore = new PlayerWidgetFillStore(this);
+        this.playerWidgetFillStore.load();
+
+        this.groupFormatStore = new GroupFormatStore(this);
+        this.groupFormatStore.load();
+
+        this.editorPlaceholderStore = new EditorPlaceholderStore(this);
+        this.editorPlaceholderStore.load();
+
+        this.nametagVisibilityStore = new NametagVisibilityStore(this);
+        this.nametagVisibilityStore.load();
+
+        this.nametagManager = new NametagManager(this, configManager, playerFormatStore, playerWidgetFillStore,
+                groupFormatStore, nametagVisibilityStore);
         this.displayManager = new NametagDisplayManager(this, configManager);
         this.nametagManager.setDisplayManager(displayManager);
         this.displayManager.setNametagManager(nametagManager);
@@ -94,11 +127,25 @@ public final class CustomPlayerNametags extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new PlayerConnectionListener(this, configManager, nametagManager, messageManager), this);
 
+        this.nametagEditorManager = new NametagEditorManager(this, configManager, nametagManager, messageManager,
+                editorPlaceholderStore, guiConfigManager);
+        getServer().getPluginManager().registerEvents(new NametagEditorListener(nametagEditorManager), this);
+
         var nametagCmd = getCommand("nametags");
         if (nametagCmd != null) {
             NametagCommand executor = new NametagCommand(this, configManager, nametagManager, messageManager);
             nametagCmd.setExecutor(executor);
             nametagCmd.setTabCompleter(executor);
+        }
+
+        // "nametag" (singular) — a completely separate command/permission
+        // from "nametags" (see plugin.yml), for a player managing only
+        // their own individual nametag.
+        var nametagSelfCmd = getCommand("nametag");
+        if (nametagSelfCmd != null) {
+            PlayerNametagCommand selfExecutor = new PlayerNametagCommand(nametagEditorManager, messageManager);
+            nametagSelfCmd.setExecutor(selfExecutor);
+            nametagSelfCmd.setTabCompleter(selfExecutor);
         }
 
         nametagManager.startRefreshTask();
@@ -141,8 +188,53 @@ public final class CustomPlayerNametags extends JavaPlugin {
                 () -> bucketHeightAdjust(configManager.getBedrockHeightAdjustConfig())));
         metrics.addCustomChart(new SimplePie("bedrock_sneak_height_adjust_value",
                 () -> bucketHeightAdjust(configManager.getBedrockSneakHeightAdjustConfig())));
+        metrics.addCustomChart(new SimplePie("bedrock_per_line_height_adjust_value",
+                () -> bucketHeightAdjust(configManager.getBedrockPerLineHeightAdjustConfig())));
         metrics.addCustomChart(new SimplePie("global_height_adjust_value",
                 () -> bucketHeightAdjust(configManager.getGlobalHeightAdjust())));
+        metrics.addCustomChart(new SimplePie("customadvancementmessages_installed",
+                () -> getServer().getPluginManager().isPluginEnabled("CustomAdvancementMessages") ? "Yes" : "No"));
+        metrics.addCustomChart(new SimplePie("luckperms_installed",
+                () -> getServer().getPluginManager().isPluginEnabled("LuckPerms") ? "Yes" : "No"));
+        metrics.addCustomChart(new SimplePie("multiverse_installed",
+                () -> getServer().getPluginManager().isPluginEnabled("Multiverse-Core") ? "Yes" : "No"));
+        metrics.addCustomChart(new SimplePie("multiverse_portals_installed",
+                () -> MultiverseIntegration.isPortalsAvailable() ? "Yes" : "No"));
+        metrics.addCustomChart(new SimplePie("widget_item_in_use",
+                () -> isWidgetItemInUse() ? "Yes" : "No"));
+    }
+
+    /**
+     * Whether any format currently active anywhere on the server — the global
+     * format, the Bedrock global format, any per-group format, or any
+     * per-player override — contains a Widget item. Every one of those is
+     * stored as the same {@code {widget ...}...{/widget}} tag text (see
+     * {@link ConfigManager#getNametagFormat()},
+     * {@link GroupFormatStore#get(String, boolean)}, and
+     * {@link PlayerFormatStore#getAllFormats()}), so
+     * {@link TemplateMarkers#containsWidget(String)} can be checked
+     * directly against each without first re-parsing anything. Short-circuits
+     * on the first match found, cheapest formats first, since this is polled
+     * repeatedly on bStats' own schedule rather than cached.
+     */
+    private boolean isWidgetItemInUse() {
+        if (TemplateMarkers.containsWidget(configManager.getNametagFormat())
+                || TemplateMarkers.containsWidget(configManager.getBedrockGlobalFormat())) {
+            return true;
+        }
+        for (boolean bedrock : new boolean[] {false, true}) {
+            for (String group : groupFormatStore.getGroupNames(bedrock)) {
+                if (TemplateMarkers.containsWidget(groupFormatStore.get(group, bedrock))) {
+                    return true;
+                }
+            }
+        }
+        for (String format : playerFormatStore.getAllFormats()) {
+            if (TemplateMarkers.containsWidget(format)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -208,8 +300,24 @@ public final class CustomPlayerNametags extends JavaPlugin {
         if (nametagManager != null) {
             nametagManager.shutdown();
         }
-        if (PacketEvents.getAPI() != null) {
-            PacketEvents.getAPI().terminate();
+        if (playerFormatStore != null) {
+            playerFormatStore.close();
+        }
+        if (playerWidgetFillStore != null) {
+            playerWidgetFillStore.close();
+        }
+        if (nametagVisibilityStore != null) {
+            nametagVisibilityStore.close();
+        }
+        try {
+            if (PacketEvents.getAPI() != null) {
+                PacketEvents.getAPI().terminate();
+            }
+        } catch (Throwable t) {
+            // PacketEvents never finished loading (e.g. the plugin failed to
+            // enable earlier on) — nothing to terminate, and a shutdown path
+            // must never throw.
+            getLogger().warning("PacketEvents could not be terminated cleanly: " + t.getMessage());
         }
         getLogger().info("CustomPlayerNametags disabled.");
     }
@@ -222,12 +330,32 @@ public final class CustomPlayerNametags extends JavaPlugin {
         return configManager;
     }
 
+    public GuiConfigManager getGuiConfigManager() {
+        return guiConfigManager;
+    }
+
     public MessageManager getMessageManager() {
         return messageManager;
     }
 
     public PlayerFormatStore getPlayerFormatStore() {
         return playerFormatStore;
+    }
+
+    public PlayerWidgetFillStore getPlayerWidgetFillStore() {
+        return playerWidgetFillStore;
+    }
+
+    public GroupFormatStore getGroupFormatStore() {
+        return groupFormatStore;
+    }
+
+    public EditorPlaceholderStore getEditorPlaceholderStore() {
+        return editorPlaceholderStore;
+    }
+
+    public NametagEditorManager getNametagEditorManager() {
+        return nametagEditorManager;
     }
 
     public NametagManager getNametagManager() {

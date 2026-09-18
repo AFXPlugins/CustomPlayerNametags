@@ -2,10 +2,11 @@ package afx.customplayernametags.manager;
 
 import afx.customplayernametags.CustomPlayerNametags;
 import afx.customplayernametags.config.ConfigManager;
+import afx.customplayernametags.format.NametagFormatter;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.Style;
 import net.kyori.adventure.text.format.TextColor;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.FluidCollisionMode;
 import org.bukkit.Location;
@@ -385,8 +386,14 @@ public final class NametagDisplayManager {
             return;
         }
 
-        Component nameComponent = LegacyComponentSerializer.legacySection().deserialize(
-                fullLegacyText == null ? "" : fullLegacyText);
+        // fullLegacyText is, despite the parameter name (kept for API
+        // stability), actually a fully-resolved MiniMessage source string
+        // by the time it reaches here — see NametagManager#parse(), which
+        // now runs every format (nametag AND tablist) through the same
+        // MiniMessage pipeline via NametagFormatter so both always render
+        // identically and both support colors, gradients, rainbow, and
+        // animated colors alongside PlaceholderAPI placeholders.
+        Component nameComponent = NametagFormatter.toComponent(fullLegacyText == null ? "" : fullLegacyText);
         brightTexts.put(target.getUniqueId(), nameComponent);
 
         DisplayPair pair = displays.get(target.getUniqueId());
@@ -462,6 +469,32 @@ public final class NametagDisplayManager {
                 // go through the full transition (text dim, opacity, height
                 // ease, LOS-aware Bedrock reveal, etc).
                 applySneakState(target, pair, sneaking);
+                if (forceAppearance) {
+                    // A forced refresh here (as opposed to just a sneak
+                    // toggle) almost always means the tag's TEXT itself
+                    // just changed — a preset was selected, a format was
+                    // set/reset, /nametags reload ran, etc.
+                    //
+                    // Re-sending just the Transformation a tick later
+                    // (the original fix here) turned out not to be enough
+                    // for a multi-line tag: Geyser only recomputes a
+                    // Bedrock viewer's passenger offset from the
+                    // TextDisplay's current text bounds when it receives a
+                    // fresh mount ("Set Passengers") packet, not on a
+                    // same-mount metadata-only update — which is exactly
+                    // why the position was already observed to correct
+                    // itself the moment the player ran an unrelated
+                    // command: dismount()/tickMaintain()'s remount produces
+                    // that fresh mount packet as a side effect. The
+                    // Transformation set by applySneakState() just above is
+                    // already correct by the time this runs, so
+                    // deliberately reusing that exact same, already-proven
+                    // dismount → auto-remount cycle here — rather than
+                    // waiting for the player to trigger one themselves —
+                    // gets a real "Set Passengers" packet resent
+                    // immediately, the same way a command does.
+                    dismount(target.getUniqueId(), ConfigManager.MIN_DISMOUNT_DURATION_TICKS);
+                }
             } else {
                 // Sneak state unchanged: only refresh the text/opacity. Do NOT
                 // call applySneakState() here — it re-runs the full
@@ -539,7 +572,7 @@ public final class NametagDisplayManager {
         // sitting at the instant before, using whatever Transformation
         // happens to already be on the entity — mounted or not.
         if (owner != null) {
-            display.teleport(dismountedRenderLocation(owner, forBedrockViewer));
+            display.teleport(dismountedRenderLocation(owner, forBedrockViewer, lineCount(display.text())));
         }
     }
 
@@ -559,11 +592,21 @@ public final class NametagDisplayManager {
      * Bedrock/Geyser correction (already baked into the entity's
      * {@link Transformation} before the dismount happens) doesn't stack a
      * second time for the brief dismounted window.
+     *
+     * <p>{@code lineCount} similarly cancels {@link ConfigManager#getBedrockPerLineHeightAdjust()}
+     * for the same reason: that correction is also baked into whatever
+     * {@link Transformation} is still sitting on the entity from before the
+     * dismount, so it's added back here — for Bedrock viewers only, scaled
+     * by the tag's own current line count — rather than being left to
+     * subtract a second time on top of the dismounted teleport.
      */
-    private Location dismountedRenderLocation(Player owner, boolean forBedrockViewer) {
+    private Location dismountedRenderLocation(Player owner, boolean forBedrockViewer, int lineCount) {
         double offset = ASSUMED_MOUNT_OFFSET
                 + config.getGlobalHeightAdjust()
                 + (forBedrockViewer ? config.getBedrockDismountHeightAdjust() : 0.0);
+        if (forBedrockViewer && lineCount > 1) {
+            offset += config.getBedrockPerLineHeightAdjust() * (lineCount - 1);
+        }
         return owner.getLocation().add(0.0, offset, 0.0);
     }
 
@@ -581,10 +624,10 @@ public final class NametagDisplayManager {
      */
     private void updateDismountedPosition(Player owner, DisplayPair pair) {
         if (pair.javaDisplay.isValid()) {
-            pair.javaDisplay.teleport(dismountedRenderLocation(owner, false));
+            pair.javaDisplay.teleport(dismountedRenderLocation(owner, false, lineCount(pair.javaDisplay.text())));
         }
         if (pair.bedrockDisplay.isValid()) {
-            pair.bedrockDisplay.teleport(dismountedRenderLocation(owner, true));
+            pair.bedrockDisplay.teleport(dismountedRenderLocation(owner, true, lineCount(pair.bedrockDisplay.text())));
         }
     }
 
@@ -650,6 +693,24 @@ public final class NametagDisplayManager {
      * instead and is never hidden here).
      */
     private void showOneToViewer(Player owner, DisplayPair pair, Player viewer) {
+        if (nametagManager != null && nametagManager.hasNametagsHidden(viewer.getUniqueId())) {
+            // /nametag toggle: this viewer doesn't want to see anyone
+            // else's nametag right now.
+            viewer.hideEntity(plugin, pair.javaDisplay);
+            viewer.hideEntity(plugin, pair.bedrockDisplay);
+            pair.bedrockHiddenFrom.remove(viewer.getUniqueId());
+            return;
+        }
+
+        if (owner.isSneaking() && config.getCrouchEffect() == ConfigManager.CrouchEffect.HIDE) {
+            // nametag-crouch-effect: HIDE — the tag is hidden entirely
+            // while the owner is crouching, for every viewer.
+            viewer.hideEntity(plugin, pair.javaDisplay);
+            viewer.hideEntity(plugin, pair.bedrockDisplay);
+            pair.bedrockHiddenFrom.remove(viewer.getUniqueId());
+            return;
+        }
+
         if (!withinRenderDistance(owner, viewer) || !viewer.canSee(owner)) {
             // Either out of range, or the owner is invisible to this
             // specific viewer — most commonly because the owner vanished
@@ -673,7 +734,11 @@ public final class NametagDisplayManager {
 
         if (viewerIsBedrock) {
             UUID viewerId = viewer.getUniqueId();
-            boolean shouldHide = sneaking && !hasLineOfSight(viewer, effectiveLocation(owner));
+            // Geyser ignores TextDisplay's see-through metadata. Apply the
+            // normal and crouching wall settings per Bedrock viewer instead.
+            boolean shouldUseWallOcclusion = !config.isNametagsThroughWallsEnabled()
+                    || (sneaking && config.isStopThroughWallsWhileCrouching());
+            boolean shouldHide = shouldUseWallOcclusion && !hasLineOfSight(viewer, effectiveLocation(owner));
             if (shouldHide) {
                 viewer.hideEntity(plugin, pair.bedrockDisplay);
                 pair.bedrockHiddenFrom.add(viewerId);
@@ -685,7 +750,7 @@ public final class NametagDisplayManager {
                     // whatever stale value was last set before it was hidden.
                     pair.bedrockDisplay.setInterpolationDelay(0);
                     pair.bedrockDisplay.setInterpolationDuration(0);
-                    pair.bedrockDisplay.setTransformation(buildTransformation(sneaking, true));
+                    pair.bedrockDisplay.setTransformation(buildTransformation(sneaking, true, lineCount(pair.bedrockDisplay.text())));
                 }
                 viewer.showEntity(plugin, pair.bedrockDisplay);
             }
@@ -719,7 +784,46 @@ public final class NametagDisplayManager {
 
         DisplayPair pair = new DisplayPair(javaDisplay, bedrockDisplay);
         applyViewerVisibility(owner, pair, sneaking);
+        scheduleResnap(owner, pair);
         return pair;
+    }
+
+    /**
+     * Re-applies the exact same {@link #buildTransformation} result one
+     * tick after a brand-new mount (see {@link #spawn}).
+     *
+     * <p>The spawn packet already carries the correct {@link Transformation}
+     * (see {@link #createDisplay}), and the mount ({@code Set Passengers})
+     * packet is sent right after it in the same tick — but on a brand new
+     * mount, clients compute the passenger's on-screen position from the
+     * vehicle's bare default attach point first and only pick up the
+     * already-received Transformation on the following render pass. That's
+     * a one-time quirk of the initial spawn+mount landing together; it does
+     * not happen on a {@code Transformation}-only change to an
+     * already-mounted passenger, which is exactly why the tag was already
+     * observed to snap to the correct spot the moment the player crouches
+     * ({@link #applySneakState} calls {@link #snapHeight} without
+     * re-mounting). Rather than rely on the player happening to trigger
+     * that, re-send the same transformation a tick later so a newly created
+     * tag is correct immediately.
+     *
+     * <p>A <em>different</em>, text-change-triggered version of this same
+     * class of lag also exists for Bedrock/Geyser on an already-mounted
+     * passenger — see {@link #update}'s call to {@link #dismount} for that
+     * one; a metadata-only resend (what this method does) turned out not to
+     * be enough to fix it, a genuine remount is needed instead.
+     */
+    private void scheduleResnap(Player owner, DisplayPair pair) {
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (displays.get(owner.getUniqueId()) != pair || !pair.isValid()) {
+                // Removed, respawned, or otherwise replaced before this ran
+                // — nothing to correct.
+                return;
+            }
+            boolean stillSneaking = owner.isOnline() && owner.isSneaking();
+            snapHeight(pair.javaDisplay, buildTransformation(stillSneaking, false, lineCount(pair.javaDisplay.text())));
+            snapHeight(pair.bedrockDisplay, buildTransformation(stillSneaking, true, lineCount(pair.bedrockDisplay.text())));
+        });
     }
 
     /**
@@ -740,8 +844,9 @@ public final class NametagDisplayManager {
             return null;
         }
 
-        final Component displayText = sneaking ? dim(bright, forBedrockViewer) : bright;
-        final Transformation transformation = buildTransformation(sneaking, forBedrockViewer);
+        boolean visualSneaking = sneaking && config.getCrouchEffect() != ConfigManager.CrouchEffect.NONE;
+        final Component displayText = visualSneaking ? dim(bright, forBedrockViewer) : bright;
+        final Transformation transformation = buildTransformation(sneaking, forBedrockViewer, lineCount(bright));
 
         return world.spawn(loc, TextDisplay.class, entity -> {
             entity.text(displayText);
@@ -816,8 +921,9 @@ public final class NametagDisplayManager {
             bright = pair.javaDisplay.text();
             brightTexts.put(owner.getUniqueId(), bright);
         }
-        Component javaText = sneaking ? dim(bright, false) : bright;
-        Component bedrockText = sneaking ? dim(bright, true) : bright;
+        boolean visualSneaking = sneaking && config.getCrouchEffect() != ConfigManager.CrouchEffect.NONE;
+        Component javaText = visualSneaking ? dim(bright, false) : bright;
+        Component bedrockText = visualSneaking ? dim(bright, true) : bright;
         pair.javaDisplay.text(javaText);
         pair.bedrockDisplay.text(bedrockText);
 
@@ -826,7 +932,24 @@ public final class NametagDisplayManager {
         // refresh can never fade the text.
         pair.javaDisplay.setInterpolationDelay(0);
         pair.javaDisplay.setInterpolationDuration(0);
-        pair.javaDisplay.setTextOpacity(sneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
+        pair.javaDisplay.setTextOpacity(visualSneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
+
+        // buildTransformation()'s Bedrock/Geyser result now depends on line
+        // count (see ConfigManager#getBedrockPerLineHeightAdjust()), but this method is the
+        // cheap "text changed, pose didn't" path used by the periodic
+        // placeholder refresh (NametagManager's scheduled task calls
+        // update() with forceAppearance=false every refresh interval). If a
+        // placeholder-driven line is added/removed here without an
+        // accompanying sneak toggle, the entity's Transformation was never
+        // being touched above, so it silently kept whichever line count it
+        // last had — under-applying (or no longer applying) the per-line
+        // correction and leaving a multi-line Bedrock tag sitting too high
+        // until the player's next crouch/uncrouch or a forced refresh
+        // happened to pass through applySneakState() instead. Bedrock's
+        // height is the only one that's line-count-sensitive, so only its
+        // Transformation needs resending here; Java's is unaffected by line
+        // count and is deliberately left alone.
+        pair.bedrockDisplay.setTransformation(buildTransformation(sneaking, true, lineCount(bedrockText)));
     }
 
     /**
@@ -866,12 +989,14 @@ public final class NametagDisplayManager {
             nametagManager.setVanillaNametagHidden(owner, true);
         }
 
-        Component javaText = sneaking ? dim(bright, false) : bright;
-        Component bedrockText = sneaking ? dim(bright, true) : bright;
+        boolean visualSneaking = sneaking && config.getCrouchEffect() != ConfigManager.CrouchEffect.NONE;
+        Component javaText = visualSneaking ? dim(bright, false) : bright;
+        Component bedrockText = visualSneaking ? dim(bright, true) : bright;
         boolean occluded = anyJavaViewerOccluded(owner);
+        int lines = lineCount(bright);
 
-        applySneakStateToOne(pair.javaDisplay, javaText, sneaking, false, occluded);
-        applySneakStateToOne(pair.bedrockDisplay, bedrockText, sneaking, true, occluded);
+        applySneakStateToOne(pair.javaDisplay, javaText, sneaking, visualSneaking, false, occluded, lines);
+        applySneakStateToOne(pair.bedrockDisplay, bedrockText, sneaking, visualSneaking, true, occluded, lines);
 
         applyViewerVisibility(owner, pair, sneaking);
     }
@@ -890,11 +1015,12 @@ public final class NametagDisplayManager {
      * needed either.
      */
     private void applySneakStateToOne(TextDisplay display, Component text,
-                                      boolean sneaking, boolean forBedrockViewer, boolean occluded) {
+                                      boolean sneaking, boolean visualSneaking,
+                                      boolean forBedrockViewer, boolean occluded, int lineCount) {
         display.setSeeThrough(effectiveSeeThrough(sneaking, occluded));
         display.text(text);
-        snapHeight(display, buildTransformation(sneaking, forBedrockViewer));
-        display.setTextOpacity(sneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
+        snapHeight(display, buildTransformation(sneaking, forBedrockViewer, lineCount));
+        display.setTextOpacity(visualSneaking ? OPACITY_SNEAKING : OPACITY_STANDING);
     }
 
     /**
@@ -908,7 +1034,13 @@ public final class NametagDisplayManager {
      * other entity, matching vanilla).
      */
     private boolean effectiveSeeThrough(boolean sneaking, boolean occludedForSomeViewer) {
-        return !sneaking && occludedForSomeViewer;
+        if (!config.isNametagsThroughWallsEnabled()) {
+            return false;
+        }
+        if (sneaking && config.isStopThroughWallsWhileCrouching()) {
+            return false;
+        }
+        return occludedForSomeViewer;
     }
 
     /**
@@ -1202,16 +1334,65 @@ public final class NametagDisplayManager {
     }
 
     /**
-     * The intended height above the player's feet for the tag, for one
-     * viewer platform and pose — every adjustment that ever affects the
-     * tag's on-screen height lives here, and both {@link #buildTransformation}
-     * (mounted rendering) and {@link #dismountedRenderLocation} (dismounted
-     * rendering) are built directly on top of it. That shared origin is
-     * what guarantees the two rendering paths can never drift apart: there
-     * is only one formula for "how high should this tag be", not two
-     * similar-but-not-quite-identical ones.
+     * Number of lines that actually take up vertical space on a
+     * Bedrock/Geyser client, used to scale
+     * {@link ConfigManager#getBedrockPerLineHeightAdjust()}. Always at
+     * least 1, even for empty text, since a single (possibly blank) line
+     * is still exactly the case that needs zero correction.
+     *
+     * <p>Geyser only renders a blank line (one with no visible text
+     * between two {@code '\n'}s, from {@link NametagFormatter#splitLines})
+     * when it's the very first line of the tag — a blank line anywhere
+     * else is collapsed entirely and contributes no height at all on a
+     * Bedrock client, unlike on Java where every line renders regardless
+     * of position. Counting a collapsed line as if it were a real one
+     * would over-apply {@link ConfigManager#getBedrockPerLineHeightAdjust()}
+     * and push the tag further down than the content Bedrock actually
+     * renders warrants, so a blank non-first line is skipped here. The
+     * first line always counts, blank or not, since it's the one case
+     * where a blank line does still render (and take up space).
      */
-    private double heightAboveFeet(boolean sneaking, boolean forBedrockViewer) {
+    private static int lineCount(Component text) {
+        List<Component> lines = NametagFormatter.splitLines(text);
+        int count = 0;
+        for (int i = 0; i < lines.size(); i++) {
+            if (i == 0 || !isBlankLine(lines.get(i))) {
+                count++;
+            }
+        }
+        return Math.max(1, count);
+    }
+
+    /**
+     * True if {@code line} has no visible text at all — i.e. it came from
+     * two consecutive {@code '\n'}s (or a leading/trailing one) rather
+     * than from any actual content. Used only by {@link #lineCount} to
+     * find the non-first blank lines Bedrock collapses; a "blank" line
+     * that carries formatting but literally zero characters still
+     * serializes to an empty string, so this catches it regardless of
+     * any color/decoration on it.
+     */
+    private static boolean isBlankLine(Component line) {
+        return PlainTextComponentSerializer.plainText().serialize(line).isEmpty();
+    }
+
+    /**
+     * The intended height above the player's feet for the tag, for one
+     * viewer platform, pose, and line count — every adjustment that ever
+     * affects the tag's on-screen height lives here, and both
+     * {@link #buildTransformation} (mounted rendering) and
+     * {@link #dismountedRenderLocation} (dismounted rendering) are built
+     * directly on top of it. That shared origin is what guarantees the two
+     * rendering paths can never drift apart: there is only one formula for
+     * "how high should this tag be", not two similar-but-not-quite-identical
+     * ones.
+     *
+     * @param lineCount number of rendered lines in the tag's current text
+     *                  (see {@link #lineCount(Component)}) — only affects
+     *                  the result when {@code forBedrockViewer} is true; see
+     *                  {@link ConfigManager#getBedrockPerLineHeightAdjust()}.
+     */
+    private double heightAboveFeet(boolean sneaking, boolean forBedrockViewer, int lineCount) {
         double aboveEyes = config.getNametagHeightOffset() - STANDING_EYE_HEIGHT;
         double eye = sneaking ? SNEAK_EYE_HEIGHT : STANDING_EYE_HEIGHT;
         double desiredFromFeet = eye + aboveEyes;
@@ -1225,6 +1406,9 @@ public final class NametagDisplayManager {
             height += config.getBedrockHeightAdjust();
             if (sneaking) {
                 height += config.getBedrockSneakHeightAdjust();
+            }
+            if (lineCount > 1) {
+                height -= config.getBedrockPerLineHeightAdjust() * (lineCount - 1);
             }
         }
         return height;
@@ -1259,8 +1443,8 @@ public final class NametagDisplayManager {
      * only ever added to the entity a Bedrock viewer is shown, regardless of
      * which platform the owner themselves is on.
      */
-    private Transformation buildTransformation(boolean sneaking, boolean forBedrockViewer) {
-        double translationY = heightAboveFeet(sneaking, forBedrockViewer) - ASSUMED_MOUNT_OFFSET;
+    private Transformation buildTransformation(boolean sneaking, boolean forBedrockViewer, int lineCount) {
+        double translationY = heightAboveFeet(sneaking, forBedrockViewer, lineCount) - ASSUMED_MOUNT_OFFSET;
         return new Transformation(
                 new Vector3f(0f, (float) translationY, 0f),
                 IDENTITY_ROTATION,

@@ -1,0 +1,514 @@
+#   _____         __             ___  __                  _  __               __
+#  / ___/_ _____ / /____  __ _  / _ \/ /__ ___ _____ ____/ |/ /__ ___ _  ___ / /____ ____ ____
+# / /__/ // (_-</ __/ _ \/  ' \/ ___/ / _ `/ // / -_) __/    / _ `/  ' \/ -_) __/ _ `/ _ `(_-<
+# \___/\_,_/___/\__/\___/_/_/_/_/  /_/\_,_/\_, /\__/_/ /_/|_/\_,_/_/_/_/\__/\__/\_,_/\_, /___/
+#                                         /___/                                     /___/
+
+
+# =============================================================================================================================
+#                                             CustomPlayerNametags GUI Configuration
+# =============================================================================================================================
+
+# =================================================================================
+# Notice: This file is reset every time the server starts and should not be edited.
+# =================================================================================
+
+main-menu:
+  title: "&8Nametag Menu"
+  edit:
+    slot: 11
+    material: ANVIL
+    name: "&bEdit Nametag"
+    lore: ["&7Edit the nametag format currently applied to you"]
+  view:
+    slot: 13
+    material: OAK_SIGN
+    name: "&fView"
+    lore: ["&7View current nametag format"]
+  # Shown in place of each other depending on whether this player currently has nametags hidden.
+  toggle-hidden:
+    slot: 15
+    material: RED_DYE
+    name: "&cNametags Hidden"
+    lore: ["&7Click to see other players' nametags"]
+  toggle-visible:
+    slot: 15
+    material: LIME_DYE
+    name: "&aNametags Visible"
+    lore: ["&7Click to stop seeing other players' nametags"]
+  close:
+    slot: 22
+    material: BARRIER
+    name: "&cClose"
+    lore: []
+
+admin-menu:
+  title: "&8Nametag Format Admin"
+  global:
+    slot: 11
+    material: BEACON
+    name: "&6Global"
+    lore: []
+  player:
+    slot: 13
+    material: PLAYER_HEAD
+    name: "&bPlayer"
+    lore: []
+  groups:
+    slot: 15
+    material: WRITABLE_BOOK
+    name: "&dGroups"
+    lore: []
+  close:
+    slot: 22
+    material: BARRIER
+    name: "&cClose"
+    lore: []
+
+players-menu:
+  title: "&8Select Player"
+  back:
+    slot: 53
+    material: OAK_DOOR
+    name: "&eBack"
+    lore: []
+
+groups-menu:
+  title: "&8Select Group"
+  # Shown only when enable-separate-bedrock-group-formats is true in
+  # config.yml — click toggles between the Java and Bedrock group lists.
+  platform-toggle-java:
+    slot: 25
+    material: GRASS_BLOCK
+    name: "&aViewing: Java"
+    lore: ["&7Click to view Bedrock groups instead"]
+  platform-toggle-bedrock:
+    slot: 25
+    material: NETHERITE_BOOTS
+    name: "&bViewing: Bedrock"
+    lore: ["&7Click to view Java groups instead"]
+  back:
+    slot: 26
+    material: OAK_DOOR
+    name: "&eBack"
+    lore: []
+
+# Shown before editing the global format only when
+# enable-separate-bedrock-global-format is true in config.yml.
+platform-choice-menu:
+  title: "&8Global Format: Platform"
+  java:
+    slot: 11
+    material: GRASS_BLOCK
+    name: "&aJava"
+    lore: ["&7Edit the normal (Java Edition) global format"]
+  bedrock:
+    slot: 15
+    material: NETHERITE_BOOTS
+    name: "&bBedrock"
+    lore: ["&7Edit the separate Bedrock global format"]
+  back:
+    slot: 22
+    material: OAK_DOOR
+    name: "&eBack"
+    lore: []
+
+# Shown before opening the group list only when
+# enable-separate-bedrock-group-formats is true in config.yml. Whichever is
+# picked opens groups-menu for that platform (which still has its own
+# in-list toggle to switch further without coming back here).
+groups-platform-choice-menu:
+  title: "&8Groups: Platform"
+  java:
+    slot: 11
+    material: GRASS_BLOCK
+    name: "&aJava"
+    lore: ["&7Browse Java Edition group formats"]
+  bedrock:
+    slot: 15
+    material: NETHERITE_BOOTS
+    name: "&bBedrock"
+    lore: ["&7Browse Bedrock group formats"]
+  back:
+    slot: 22
+    material: OAK_DOOR
+    name: "&eBack"
+    lore: []
+
+editor:
+  title: "&8Nametag Editor"
+  back:
+    slot: 45
+    material: OAK_DOOR
+    name: "&eBack"
+    lore: ["&7Discard changes"]
+  create:
+    slot: 53
+    material: EMERALD
+    name: "&aCreate"
+    lore: ["&7Save format"]
+  add-item:
+    slot: 49
+    material: HOPPER
+    name: "&aAdd Item"
+    lore: ["&7Add a new format piece"]
+  # Only shown when the format has more logical lines than fit on screen at once.
+  scroll-up:
+    slot: 48
+    material: SPECTRAL_ARROW
+    name: "&eScroll Up"
+    lore: []
+  scroll-down:
+    slot: 50
+    material: SPECTRAL_ARROW
+    name: "&eScroll Down"
+    lore: []
+  # Only shown when at least one line has more chunks than fit across one row at once.
+  move-left:
+    slot: 47
+    material: ARROW
+    name: "&eMove Left"
+    lore: ["&7Scroll this line left"]
+  move-right:
+    slot: 51
+    material: ARROW
+    name: "&eMove Right"
+    lore: ["&7Scroll this line right"]
+
+# Opened by the editor's "Add Item" button — the 4 ways to add a new chunk.
+add-item-menu:
+  title: "&8Add Format Piece"
+  color:
+    slot: 9
+    material: RED_WOOL
+    name: "&cColor"
+    lore: ["&7Add a color/style"]
+  placeholder:
+    slot: 11
+    material: NAME_TAG
+    name: "&bPlaceholder"
+    lore: ["&7Add a placeholder"]
+  text:
+    slot: 13
+    material: OAK_SIGN
+    name: "&fText"
+    lore: ["&7Add text"]
+  newline:
+    slot: 15
+    material: FEATHER
+    name: "&aNew Line"
+    lore: ["&7Add a new line"]
+  # Only shown to an admin editing a Global/Player/Group template — never to
+  # a player editing their own applied format.
+  widget:
+    slot: 17
+    material: ITEM_FRAME
+    name: "&dWidget"
+    lore: ["&7Add a slot players can fill themselves"]
+  back:
+    slot: 22
+    material: OAK_DOOR
+    name: "&eBack"
+    lore: []
+
+colors-menu:
+  title: "&8Select Color"
+  dark_red:
+    slot: 0
+    material: RED_WOOL
+    name: "&fDark Red"
+    lore: ["&7Click to add color/style"]
+  red:
+    slot: 1
+    material: RED_WOOL
+    name: "&fRed"
+    lore: ["&7Click to add color/style"]
+  gold:
+    slot: 2
+    material: ORANGE_WOOL
+    name: "&fGold"
+    lore: ["&7Click to add color/style"]
+  yellow:
+    slot: 3
+    material: YELLOW_WOOL
+    name: "&fYellow"
+    lore: ["&7Click to add color/style"]
+  dark_green:
+    slot: 4
+    material: GREEN_WOOL
+    name: "&fDark Green"
+    lore: ["&7Click to add color/style"]
+  green:
+    slot: 5
+    material: LIME_WOOL
+    name: "&fGreen"
+    lore: ["&7Click to add color/style"]
+  dark_aqua:
+    slot: 6
+    material: CYAN_WOOL
+    name: "&fDark Aqua"
+    lore: ["&7Click to add color/style"]
+  aqua:
+    slot: 7
+    material: CYAN_WOOL
+    name: "&fAqua"
+    lore: ["&7Click to add color/style"]
+  dark_blue:
+    slot: 8
+    material: BLUE_WOOL
+    name: "&fDark Blue"
+    lore: ["&7Click to add color/style"]
+  blue:
+    slot: 9
+    material: LIGHT_BLUE_WOOL
+    name: "&fBlue"
+    lore: ["&7Click to add color/style"]
+  dark_purple:
+    slot: 10
+    material: PURPLE_WOOL
+    name: "&fDark Purple"
+    lore: ["&7Click to add color/style"]
+  light_purple:
+    slot: 11
+    material: MAGENTA_WOOL
+    name: "&fLight Purple"
+    lore: ["&7Click to add color/style"]
+  white:
+    slot: 12
+    material: WHITE_WOOL
+    name: "&fWhite"
+    lore: ["&7Click to add color/style"]
+  gray:
+    slot: 13
+    material: LIGHT_GRAY_WOOL
+    name: "&fGray"
+    lore: ["&7Click to add color/style"]
+  dark_gray:
+    slot: 14
+    material: GRAY_WOOL
+    name: "&fDark Gray"
+    lore: ["&7Click to add color/style"]
+  black:
+    slot: 15
+    material: BLACK_WOOL
+    name: "&fBlack"
+    lore: ["&7Click to add color/style"]
+  bold:
+    slot: 16
+    material: BROWN_WOOL
+    name: "&fBold"
+    lore: ["&7Click to add color/style"]
+  italic:
+    slot: 17
+    material: BROWN_WOOL
+    name: "&fItalic"
+    lore: ["&7Click to add color/style"]
+  obfuscated:
+    slot: 18
+    material: BROWN_WOOL
+    name: "&fObfuscated"
+    lore: ["&7Click to add color/style"]
+  back:
+    slot: 26
+    material: OAK_DOOR
+    name: "&eBack"
+    lore: []
+
+placeholders-menu:
+  title: "&8Select Placeholder"
+  back:
+    slot: 26
+    material: OAK_DOOR
+    name: "&eBack"
+    lore: []
+
+# Opened from Add Item's Widget button when creating a brand-new widget, or
+# from widget-contents-menu's "Edit Permissions" button when re-configuring an
+# existing one — lets the admin choose which item types (and character limit)
+# the player will be allowed to put into the slot. The name of each toggle
+# button is shown stripped of its own color and re-colored green/yellow-vs-gray
+# at render time depending on whether it's currently on or off, so only the
+# material/slot/base text here are actually admin-configurable. The "Add"
+# button's own label switches to "Save Changes" at render time when editing an
+# existing widget's permissions instead of creating a new one.
+widget-toggles-menu:
+  title: "&8Widget: Allowed Items"
+  colors:
+    slot: 10
+    material: RED_WOOL
+    name: "&cAllow Colors"
+    lore: ["&7Whether colors/styles can be added to this widget"]
+  placeholders:
+    slot: 12
+    material: NAME_TAG
+    name: "&bAllow Placeholders"
+    lore: ["&7Whether placeholders can be added to this widget"]
+  text:
+    slot: 14
+    material: OAK_SIGN
+    name: "&fAllow Text"
+    lore: ["&7Whether text can be added to this widget"]
+  # Not a toggle — clicking opens the sign editor to type a new limit, or leave it blank
+  # for unlimited. Current value is appended to this lore at render time.
+  character-limit:
+    slot: 16
+    material: PAPER
+    name: "&eCharacter Limit"
+    lore: ["&7Maximum characters allowed in a Text item added to this widget"]
+  add:
+    slot: 22
+    material: EMERALD
+    name: "&aAdd"
+    lore: ["&7Add this widget to the format"]
+  back:
+    slot: 26
+    material: OAK_DOOR
+    name: "&eBack"
+    lore: []
+
+# Opened when a player or admin clicks an existing Widget item in the
+# editor grid — shows what's currently inside it.
+widget-contents-menu:
+  title: "&8Widget Contents"
+  add-item:
+    slot: 13
+    material: HOPPER
+    name: "&aAdd Item"
+    lore: ["&7Add an item to this widget"]
+  # The following 2 are only shown to an admin editing a Global/Player/Group
+  # template — a player can empty a widget by removing its contents one at a
+  # time but can never change its permissions or remove the slot itself.
+  edit-permissions:
+    slot: 11
+    material: COMPARATOR
+    name: "&eEdit Permissions"
+    lore: ["&7Change what item types are allowed here"]
+  delete-widget:
+    slot: 15
+    material: BARRIER
+    name: "&cDelete Widget"
+    lore: ["&7Remove this widget entirely"]
+  back:
+    slot: 22
+    material: OAK_DOOR
+    name: "&eBack"
+    lore: []
+
+# Opened when clicking an individual item inside a widget's contents — same
+# shape as detail-menu, scoped to just that widget's slot.
+widget-item-detail-menu:
+  title: "&8Edit Widget Item"
+  move-left:
+    slot: 11
+    material: ARROW
+    name: "&eMove left"
+    lore: []
+  delete:
+    slot: 13
+    material: BARRIER
+    name: "&cDelete"
+    lore: []
+  move-right:
+    slot: 15
+    material: ARROW
+    name: "&eMove right"
+    lore: []
+  # Only shown when the selected item is a Text chunk — Color/Placeholder items are picked from a
+  # fixed list, so changing one is just deleting it and adding another.
+  edit:
+    slot: 17
+    material: WRITABLE_BOOK
+    name: "&eEdit"
+    lore: ["&7Change this item's text"]
+  back:
+    slot: 22
+    material: OAK_DOOR
+    name: "&aBack"
+    lore: []
+
+# Opened by widget-contents-menu's "Add Item" button — only offers the
+# item types the admin actually allowed for that widget.
+widget-add-item-menu:
+  title: "&8Add Widget Item"
+  color:
+    slot: 11
+    material: RED_WOOL
+    name: "&cColor"
+    lore: ["&7Add a color/style"]
+  color-disabled:
+    slot: 11
+    material: BARRIER
+    name: "&cColors Disabled"
+    lore: ["&7This widget does not allow colors/styles"]
+  placeholder:
+    slot: 13
+    material: NAME_TAG
+    name: "&bPlaceholder"
+    lore: ["&7Add a saved placeholder"]
+  placeholder-disabled:
+    slot: 13
+    material: BARRIER
+    name: "&cPlaceholders Disabled"
+    lore: ["&7This widget does not allow placeholders"]
+  text:
+    slot: 15
+    material: OAK_SIGN
+    name: "&fText"
+    lore: ["&7Add text via sign GUI"]
+  text-disabled:
+    slot: 15
+    material: BARRIER
+    name: "&cText Disabled"
+    lore: ["&7This widget does not allow text"]
+  back:
+    slot: 22
+    material: OAK_DOOR
+    name: "&eBack"
+    lore: []
+
+# Opened when clicking an individual chunk in the editor grid. {kind} in the title is replaced with the chunk's kind (Text/Placeholder/Color/Newline).
+detail-menu:
+  title: "&8Edit {kind}"
+  move-left:
+    slot: 11
+    material: ARROW
+    name: "&eMove left"
+    lore: ["&7Move earlier in the format"]
+  # Shown for every piece EXCEPT a Widget. A Widget uses this same slot for
+  # "edit" below instead, since a widget is deleted from inside its own
+  # contents page (widget-contents-menu's "Delete Widget") rather than here.
+  delete:
+    slot: 13
+    material: BARRIER
+    name: "&cDelete"
+    lore: ["&7Remove this piece"]
+  # Only shown when the selected piece is a Widget — opens that widget's
+  # contents page.
+  edit:
+    slot: 13
+    material: ITEM_FRAME
+    name: "&eEdit Contents"
+    lore: ["&7View and edit this widget's contents"]
+  move-right:
+    slot: 15
+    material: ARROW
+    name: "&eMove right"
+    lore: ["&7Move later in the format"]
+  back:
+    slot: 22
+    material: OAK_DOOR
+    name: "&aBack"
+    lore: []
+
+confirm-menu:
+  title: "&8Confirm Delete"
+  cancel:
+    slot: 11
+    material: REDSTONE_BLOCK
+    name: "&cCancel"
+    lore: []
+  confirm:
+    slot: 15
+    material: EMERALD_BLOCK
+    name: "&aConfirm"
+    lore: ["&7This cannot be undone"]

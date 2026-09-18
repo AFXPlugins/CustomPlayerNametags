@@ -5,27 +5,139 @@
 #                                         /___/                                     /___/
 
 
-# ===============================================================================
+# ============================================================================================
 # Reload command: /nametags reload
-# Documentation: https://afxplugins.github.io/documentation/customplayernametags/
-# ===============================================================================
+# Config guide: https://afxplugins.github.io/documentation/customplayernametags/configuration/
+# ============================================================================================
 
 
 # ========================================================================
-#                              Nametag Format
+#                       Global/Group Nametag Formats
 # ========================================================================
 # How to use PlaceholderAPI placeholders:
 # https://wiki.placeholderapi.com/users/using-placeholders/
 #
+# How to use MiniMessage:
+# https://docs.papermc.io/adventure/minimessage/format/
+#
 # Global format used for all player nametags.
-# Supports any PlaceholderAPI placeholder and '&' colors.
+# Supports any PlaceholderAPI placeholder, '&' colors, and MiniMessage.
 # Use "{player}" for the player's username.
 # Use "\n" in the format to start a new line.
-# Use "/nametags format" to set custom formats for individual players.
+#
+# Widgets are customizable items that allow players to configure the items within them.
+# Use widget colors=true placeholders=true text=false}...{/widget} to create one.
+# Fill "..." with any default content, or remove to make it empty.
 
 # Default: "{player}"
-# Example: "%luckperms_prefix%%essentials_nickname%"
 nametag-format: "{player}"
+
+# Whether Bedrock players use the separate bedrock-nametag-format
+# Default: false
+enable-separate-bedrock-global-format: false
+
+# Separate global format for Bedrock players that overrides nametag-format.
+# Requires enable-separate-bedrock-global-format set to true.
+# Default: "{player}"
+bedrock-nametag-format: "{player}"
+
+# Text added to the beginning/end of Bedrock players' formats.
+bedrock-nametag-prefix: ""
+bedrock-nametag-suffix: ""
+apply-bedrock-prefix-suffix-to-global-format: false
+apply-bedrock-prefix-suffix-to-player-format: false
+apply-bedrock-prefix-suffix-to-group-format: false
+
+# Weather to store a separate set of group formats for Bedrock players.
+# When true, adds bedrock/java option to "/nametags format groups set".
+enable-separate-bedrock-group-formats: false
+
+# Maximum characters allowed in nametag formats.
+# Default: 24
+nametag-line-max-characters: 24
+
+# Whether "..." is appended to a nametag line that's past its character
+# Default: true
+nametag-truncate-indicator: true
+
+# Same as above, but for a Widget's separate character-limit.
+# Default: true
+nametag-widget-truncate-indicator: true
+# ========================================================================
+
+
+# ========================================================================
+#                         Player Nametag Formats
+# ========================================================================
+# ------------------------------------------------------------------------
+#                      Nametag Format Notify Modes:
+# ------------------------------------------------------------------------
+# NOTIFY - Always tells the affected player their nametag was changed.
+# ------------------------------------------------------------------------
+# SILENT - Never tells the affected player their nametag was changed.
+# ------------------------------------------------------------------------
+# BOTH   - Adds announce/silent options to "/nametags format player set".
+# ------------------------------------------------------------------------
+# Whether a player is told in chat when their nametag format is changed.
+# Default: NOTIFY
+nametag-format-notify-mode: NOTIFY
+
+# Message sent to a player when someone changes their nametag format
+# Use "{player}" for the name of the player who made the change.
+# Use "{format}" for the new nametag format that was set.
+# Default: "&7Your nametag format was just changed by {player} to: \n{format}"
+nametag-format-changed-notify: "&7Your nametag format was just changed by {player} to: \n{format}"
+
+# Message sent to a player when someone disables their individual nametag
+# format (/nametags format player disable). Follows nametag-format-notify-mode
+# the same way nametag-format-changed-notify does.
+# Use "{player}" for the name of the player who made the change.
+# Use "{type}" for what they're now using instead: "global" or "group".
+# Use "{format}" for the new nametag format that was set.
+# Default: "&7Your custom nametag format has been cleared. Now using {type} format: \n{format}"
+nametag-format-disabled-notify: "&7Your custom nametag format has been cleared. Now using {type} format: \n{format}"
+# ========================================================================
+
+
+# ========================================================================
+#                            Nametag Behavior
+# ========================================================================
+# Whether to use players' custom nametags instead of username in tab list.
+# Default: true
+enable-tablist-format: true
+
+# Whether to enable/disable automatic placeholder value refresh.
+# Default: true
+enable-nametag-format-placeholder-refresh: true
+
+# How often (in ticks) nametag format placeholders refresh.
+# Requires enable-nametag-format-placeholder-refresh set to true.
+# Default: 20
+nametag-format-placeholder-refresh-interval-ticks: 20
+
+# ------------------------------------------------------------------------
+#                      Nametag Format Notify Modes:
+# ------------------------------------------------------------------------
+# NONE    - The nametag looks the same as when the player is standing.
+# ------------------------------------------------------------------------
+# DEFAULT - The nametag dims and turns grey while crouching (default).
+# ------------------------------------------------------------------------
+# HIDE    - The nametag is hidden entirely while crouching.
+# ------------------------------------------------------------------------
+# Controls how a player's nametag looks when crouching.
+nametag-crouch-effect: DEFAULT
+
+# Whether nametags show through walls.
+# Default: true
+enable-nametags-through-walls: true
+
+# Whether crouching stops a nametag from showing through walls.
+# Default: true
+stop-nametags-through-walls-while-crouching: true
+
+# Maximum render distance for nametags.
+# Default: 64 (Same as vanilla)
+nametag-render-distance: 64
 # ========================================================================
 
 
@@ -75,14 +187,21 @@ nametag-dismount-mode: AUTO
 # Commands that dismount the nametag.
 # Do not include the slash.
 dismount-commands:
-  - examplecommand1
-  - examplecommand2
+- examplecommand1
+- examplecommand2
 
 # How long (in ticks) the nametag stays dismounted.
 # The nametag remounts immediately after the player changes worlds.
 # Values of 1 or lower will automatically be adjusted to 2 internally.
 # Default: 5
 dismount-duration-ticks: 5
+
+# If Multiverse-Portals is installed and Multiverse-Core's own passenger-mode
+#  config value is still left at "default", warn admins about it on join with
+#  a clickable chat message that fixes it for them (see the note above about
+#  Multiverse-Core's passenger-mode). Set to false to never show this.
+# Default: true
+notify-multiverse-passenger-mode-default: true
 # ==============================================================================
 
 
@@ -93,23 +212,22 @@ dismount-duration-ticks: 5
 # It is recommended to start with increments of +/- 0.1
 
 # Nametag height correction for all players.
-global-nametag-height-adjust: 0
+global-nametag-height-adjust: 0.0
 
 # Extra height correction for nametags rendered through bedrock players.
-bedrock-height-adjust: 0
+bedrock-height-adjust: 0.0
 
 # Extra sneak correction for nametags rendered through bedrock players.
-bedrock-sneak-height-adjust: 0
+bedrock-sneak-height-adjust: 0.0
+
+# Extra per-line correction for multi-line nametags rendered through bedrock
+#  players. Applied once for every line beyond the tag's first. Lower this
+#  (or make it negative) if a multi-line tag sits too far below where a
+#  single-line tag would; raise it if a multi-line tag's lower lines drift
+#  upward off the player's head instead.
+bedrock-per-line-height-adjust: 0.0
+
 # ==============================================================================
-
-
-# =========================================================================
-#                               Other Options
-# =========================================================================
-# Maximum render distance for nametags.
-# Default: 64 (Same as vanilla)
-nametag-render-distance: 64
-# =========================================================================
 
 
 

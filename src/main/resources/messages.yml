@@ -6,7 +6,7 @@
 
 
 # =============================================================================================================================
-#                                                 CustomPlayerNametags Messages
+#                                           CustomPlayerNametags Messages Configuration
 # =============================================================================================================================
 
 # =================================================================================
@@ -17,9 +17,19 @@
 # --------------------------------------------------------
 no-permission: "&cYou do not have permission to do that."
 reload-success: "&aCustomPlayerNametags reloaded."
+format-invalid-fallback: "&cWarning: config.yml's \"{key}\" has invalid {widget ...}...{/widget} syntax (check for a missing or mismatched tag) — it fell back to the default (\"{player}\") until this is fixed."
 player-not-found: "&cThat player isn't online."
 console-only: "&cThat subcommand is console-only."
+player-only: "&cThat subcommand can only be used by a player."
 # --------------------------------------------------------
+
+
+# /nametag menu — main menu (Edit, View, Toggle)
+# ---------------------------------------------------------------------
+toggle-hidden: "&aYou no longer see other players' nametags."
+toggle-shown: "&aYou can now see other players' nametags."
+format-set-self-success: "&aUpdated your nametag format."
+# ---------------------------------------------------------------------
 
 
 # /nametags dismount <player> [ticks]
@@ -40,25 +50,39 @@ update-notice: "&6[CustomPlayerNametags] &eA new version is available:\n&cv{curr
 # -----------------------------------------------------------------------------------------------------------------------------
 
 
-# /nametags format view
-# ---------------------------------------------------------------------------
-format-view-global-unparsed-header: "&7Global unparsed format:"
-format-view-global-parsed-header: "&7Global parsed format (as &e{player}&7):"
-format-view-player-header: "&e{player}&7's {type} format:"
-# ---------------------------------------------------------------------------
+
+# Admin join notice — Multiverse-Core's teleport.passenger-mode
+# -----------------------------------------------------------------------------------------------------------------------------
+multiverse-passenger-mode-notice: "&6[CustomPlayerNametags] &4[IMPORTANT!] &eMultiverse-Core's &fpassenger-mode &eis set to &f\"default\"&e. This plugins functionality unintentionally prevents Multiverse-Portals from teleporting players when left in this mode. Set it to &f\"dismount_passengers\"&e to fix this."
+multiverse-passenger-mode-click: "&a[Click here to set passenger-mode to dismount_passengers]"
+multiverse-passenger-mode-click-hover: "&7Runs: &f/mv config passenger-mode dismount_passengers"
+# -----------------------------------------------------------------------------------------------------------------------------
 
 
 # /nametags format set
 # ---------------------------------------------------------------------
 format-set-global-success: "&aUpdated the global nametag format."
-format-set-player-success: "&aUpdated nametag format for &e{player}&a."
+format-set-player-success: "&aUpdated &e{player}&a's nametag format."
 # ---------------------------------------------------------------------
 
 
-# /nametags format reset
+# /nametags format global reset | /nametags format player disable
 # -----------------------------------------------------------------------------------------
 format-reset-global-success: "&aReset the global nametag format to the default."
-format-reset-player-success: "&aReset &e{player}&a's nametag format to the global format."
+format-reset-player-success: "&aDisabled &e{player}&a's individual nametag format."
+# -----------------------------------------------------------------------------------------
+
+
+# /nametags format groups add|edit|remove|view
+# -----------------------------------------------------------------------------------------
+format-groups-add-success: "&aAdded a nametag format for group &e{group}&a."
+format-groups-add-exists: "&cGroup &e{group}&c already has a custom format — use &fedit&c to change it."
+format-groups-edit-success: "&aUpdated the nametag format for group &e{group}&a."
+format-groups-edit-not-found: "&cGroup &e{group}&c doesn't have a custom format yet — use &fadd&c to create one."
+format-groups-remove-success: "&aRemoved the custom nametag format for group &e{group}&a."
+format-groups-remove-not-found: "&cGroup &e{group}&c doesn't have a custom format to remove."
+format-groups-view-not-found: "&cGroup &e{group}&c doesn't have a custom format to view."
+format-groups-luckperms-missing: "&eWarning: LuckPerms isn't installed, so this group format won't apply to anyone yet."
 # -----------------------------------------------------------------------------------------
 
 
@@ -68,28 +92,45 @@ usage-top-level:
   - "&cUsages:"
   - "&f/{label} reload &e- Reload plugin."
   - "&f/{label} update &e- Check plugin for updates."
-  - "&f/{label} format &e- Manage nametag formats."
+  - "&f/{label} format &e- Manage nametag formats (including LuckPerms group formats)."
+  - "&f/{label} editor &e- Open the nametag format editor."
+  - "&f/{label} config &e- View/change safely-runtime-changeable config.yml values."
 
 usage-format:
   - "&cUsages:"
-  - "&f/{label} format view &6<&fglobal&6|&fplayer&6> &e- View nametag format."
-  - "&f/{label} format set &6<&fglobal&6|&fplayer&6> &e- Set nametag format."
-  - "&f/{label} format reset &6<&fglobal&6|&fplayer&6> &e- Reset nametag format."
-
-usage-format-view:
-  - "&cUsages:"
-  - "&f/{label} format view global unparsed &e- View the unparsed global nametag format."
-  - "&f/{label} format view global parsed &6<&fplayer&6> &e- View the global nametag format parsed for a player."
-  - "&f/{label} format view player &6<&funparsed&6|&fparsed&6> &6<&fplayer&6> &e- View a player's nametag format."
+  - "&f/{label} format global set &6[&fjava/bedrock&6] &6<&fformat&6>|reset &6[&fjava/bedrock&6]|view &6[&fjava/bedrock&6] &6[&fplayer&6] &e- Manage the global format. &6[&fjava/bedrock&6] only applies when enable-separate-bedrock-global-format is true."
+  - "&f/{label} format player set &6<&fplayer&6> &6[&fannounce/silent&6] &6<&fformat&6>|disable &6<&fplayer&6>|view &6<&fplayer&6> &e- Manage a player's format. &6[&fannounce/silent&6] only applies when nametag-format-notify-mode is BOTH."
+  - "&f/{label} format groups add &6[&fjava/bedrock&6] &6<&fgroup&6> &6<&fformat&6>|edit &6[&fjava/bedrock&6] &6<&fgroup&6> &6<&fformat&6>|remove &6[&fjava/bedrock&6] &6<&fgroup&6>|view &6[&fjava/bedrock&6] &6<&fgroup&6> &6[&fplayer&6] &e- Manage group formats. &6[&fjava/bedrock&6] only applies when enable-separate-bedrock-group-formats is true."
 
 usage-format-set:
   - "&cUsages:"
   - "&f/{label} format set global &6<&fformat&6> &e- Set the global nametag format."
   - "&f/{label} format set player &6<&fplayer&6> &6<&fformat&6> &e- Set a player's nametag format."
 
-usage-format-reset:
+usage-format-groups:
   - "&cUsages:"
-  - "&f/{label} format reset global &e- Reset the global nametag format to default."
-  - "&f/{label} format reset player &6<&fplayer&6> &e- Reset a player's nametag format."
+  - "&f/{label} format groups add &6[&fjava/bedrock&6] &6<&fgroup&6> &6<&fformat&6> &e- Create a new group's nametag format. Fails if the group already has one."
+  - "&f/{label} format groups edit &6[&fjava/bedrock&6] &6<&fgroup&6> &6<&fformat&6> &e- Update an existing group's nametag format. Fails if the group doesn't have one yet."
+  - "&f/{label} format groups remove &6[&fjava/bedrock&6] &6<&fgroup&6> &e- Remove a group's nametag format."
+  - "&f/{label} format groups view &6[&fjava/bedrock&6] &6<&fgroup&6> &6[&fplayer&6] &e- View a group's format, unparsed and parsed."
+
 # ----------------------------------------------------------------------------------------------------------------
+
+
+# /nametag (separate command from /nametags) — GUI-only, no subcommand syntax
+# to document here; running it just opens the menu (see NametagEditorManager).
+# ---------------------------------------------------------------------
+
+nametag-view-header: "&7Current nametag format:"
+# ---------------------------------------------------------------------
+
+
+# /nametags config
+# ---------------------------------------------------------------------------------
+config-list-header: "&7Configurable values (&f/{label} config <key> <value>&7 to change):"
+config-list-entry: "&e{key}&7: &f{value}"
+config-key-not-found: "&cUnknown config value: {key}&c. Run &e/nametags config&c to see the list."
+config-invalid-value: "&cInvalid value for &e{key}&c. Expected: {hint}"
+config-set-success: "&aSet &e{key}&a to &f{value}&a."
+# ---------------------------------------------------------------------------------
 # =============================================================================================================================

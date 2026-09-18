@@ -1,6 +1,7 @@
 package afx.customplayernametags.config;
 
 import afx.customplayernametags.CustomPlayerNametags;
+import afx.customplayernametags.storage.StorageFiles;
 import net.md_5.bungee.api.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -28,6 +29,8 @@ import java.util.List;
  */
 public final class MessageManager {
 
+    private static final String FILE_NAME = "messages.yml";
+
     private final CustomPlayerNametags plugin;
     private final File file;
 
@@ -36,17 +39,24 @@ public final class MessageManager {
 
     public MessageManager(CustomPlayerNametags plugin) {
         this.plugin = plugin;
-        this.file = new File(plugin.getDataFolder(), "messages.yml");
+        this.file = StorageFiles.file(plugin, FILE_NAME);
     }
 
-    /** Loads (or reloads) messages.yml from disk, writing the bundled default file first if it doesn't exist yet. */
+    /**
+     * Loads (or reloads) {@code storage/messages.yml} from disk, migrating
+     * a pre-existing {@code messages.yml} that still lives directly in the
+     * plugin's data folder (from before it moved under {@code storage/})
+     * first, then writing the bundled default file if nothing exists at
+     * the destination yet.
+     */
     public void load() {
+        StorageFiles.migrateLegacyFile(plugin, new File(plugin.getDataFolder(), FILE_NAME), FILE_NAME);
         if (!file.exists()) {
-            plugin.saveResource("messages.yml", false);
+            StorageFiles.saveResource(plugin, FILE_NAME, false);
         }
         this.messages = YamlConfiguration.loadConfiguration(file);
 
-        try (InputStream in = plugin.getResource("messages.yml")) {
+        try (InputStream in = plugin.getResource(FILE_NAME)) {
             if (in != null) {
                 this.defaults = YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
             }
@@ -55,9 +65,22 @@ public final class MessageManager {
         }
     }
 
-    /** Overwrites the on-disk messages.yml with the bundled default. Intended to be called once on server start, before {@link #load()}, so messages.yml resets every time the server starts. */
+    /**
+     * Overwrites the on-disk storage/messages.yml with the bundled default.
+     * Called once on server start, before {@link #load()}, so messages.yml
+     * is deliberately reset to the shipped defaults every time the server
+     * starts.
+     */
     public void resetToDefault() {
-        plugin.saveResource("messages.yml", true);
+        // Migrate a pre-existing root-level messages.yml into storage/ first
+        // — otherwise the saveResource() call below would create the
+        // storage/ destination itself, and migrateLegacyFile() (called
+        // again from load(), right after this) would then see that
+        // destination already exists and refuse to touch it, leaving the
+        // old root-level copy behind forever instead of being moved (and
+        // thus deleted from its old location).
+        StorageFiles.migrateLegacyFile(plugin, new File(plugin.getDataFolder(), FILE_NAME), FILE_NAME);
+        StorageFiles.saveResource(plugin, FILE_NAME, true);
     }
 
     private String raw(String key) {

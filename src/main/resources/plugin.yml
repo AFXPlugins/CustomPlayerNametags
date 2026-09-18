@@ -7,18 +7,64 @@ description: >
   Fully customizable player nametags.
 
 depend: [packetevents]
-softdepend: [PlaceholderAPI]
+softdepend: [PlaceholderAPI, LuckPerms, Multiverse-Core, Multiverse-Portals]
 
 commands:
   nametags:
-    description: CustomPlayerNametags commands
-    usage: /nametags reload | /nametags update | /nametags format view | /nametags format set | /nametags format reset
+    description: CustomPlayerNametags admin/management commands
+    usage: /nametags format player set|disable | /nametags format global set|reset | /nametags format groups set|remove
     aliases: [customplayernametags]
+  nametag:
+    description: Manage your own individual nametag format
+    usage: /nametag — opens the nametag menu (View, Toggle, Edit Nametag)
+    # Deliberately NOT an alias of /nametags — this is its own command with
+    # its own registration and its own permission handling (see
+    # customplayernametags.nametag below), separate from the admin/general
+    # "nametags" command entirely.
 
 permissions:
   customplayernametags.admin:
-    description: Allows use of all CustomPlayerNametags commands.
+    description: Allows use of all CustomPlayerNametags admin commands (/nametags).
     default: op
   customplayernametags.updatenotify:
     description: Receive a message on join when a new plugin update is available.
     default: op
+  customplayernametags.multiversenotify:
+    description: >-
+      Receive a message on join, with a clickable fix, when Multiverse-Portals
+      is installed, Multiverse-Core's teleport.passenger-mode config value is
+      still set to "default" (which can let a nametag's passenger entity
+      prevent Multiverse-Portals from teleporting players).
+    default: op
+  customplayernametags.nametag:
+    description: >-
+      Allows use of the /nametag command (view/toggle/editor) to manage your
+      own individual nametag.
+    default: true
+  customplayernametags.bypasslinecharacterlimit:
+    description: >-
+      Bypasses nametag-line-max-characters for the player. This is not granted
+      by default, including to OPs.
+    default: false
+  # customplayernametags.bypasslinecharacterlimit.<N> (e.g.
+  # customplayernametags.bypasslinecharacterlimit.40) is a dynamic tiered node,
+  # not declared here since <N> isn't fixed: grant it via a permissions plugin
+  # to give a specific player/group a per-line character limit of <N>,
+  # overriding nametag-line-max-characters from config.yml. The highest <N> a
+  # player has is used. customplayernametags.bypasslinecharacterlimit still
+  # wins over any bypasslinecharacterlimit.<N> node. Not granted to anyone by
+  # default.
+  customplayernametags.notify.override.notify:
+    description: >-
+      Forces this player to always be told when someone else changes their
+      individual nametag format, regardless of nametag-format-notify-mode
+      (or the announce/silent argument in BOTH mode). Not granted by default.
+    default: false
+  customplayernametags.notify.override.silent:
+    description: >-
+      Forces this player to never be told when someone else changes their
+      individual nametag format, regardless of nametag-format-notify-mode
+      (or the announce/silent argument in BOTH mode). Takes priority over
+      customplayernametags.notify.override.notify if a player somehow has
+      both. Not granted by default.
+    default: false

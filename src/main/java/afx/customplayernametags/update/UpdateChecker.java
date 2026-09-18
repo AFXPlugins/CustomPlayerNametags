@@ -69,6 +69,13 @@ public final class UpdateChecker {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             Result result = fetchLatestRelease();
             lastResult = result;
+            if (!plugin.isEnabled()) {
+                // The server shut down (or the plugin was disabled) while
+                // this request was still in flight — scheduling anything at
+                // that point throws IllegalPluginAccessException, and there
+                // is nobody left to report the result to anyway.
+                return;
+            }
             Bukkit.getScheduler().runTask(plugin, () -> callback.accept(result));
         });
     }

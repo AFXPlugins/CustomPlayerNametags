@@ -23,10 +23,29 @@ import org.jetbrains.annotations.NotNull;
  *       requesting player has a per-player override, resolved the same way
  *       via {@link NametagManager#getGlobalParsedFormat(Player)}.</li>
  * </ul>
+ *
+ * <p>Both go through {@link NametagManager#parseFormat}, which strips every
+ * {@code {widget ...}...{/widget}} marker down to just that widget's own
+ * (possibly player-filled) inner content spliced in at the widget's
+ * position — see {@link afx.customplayernametags.format.TemplateMarkers#strip} —
+ * so neither placeholder ever leaks raw widget syntax; what a placeholder
+ * consumer sees is exactly the text a widget resolves to, in place.
  */
 public final class CustomPlayerNametagsExpansion extends PlaceholderExpansion {
 
     private static final String IDENTIFIER = "customplayernametags";
+
+    /**
+     * Guards against infinite recursion when one of this expansion's own
+     * placeholders is put inside a nametag format: resolving the format
+     * calls PlaceholderAPI, which calls back into here, which resolves the
+     * format again... until the thread's stack overflows and the nametag
+     * refresh task dies. A server owner can reasonably write
+     * {@code %customplayernametags_format%} into {@code nametag-format} by
+     * mistake, so the re-entrant call is simply resolved as empty text
+     * instead of being allowed to recurse.
+     */
+    private static final ThreadLocal<Boolean> RESOLVING = ThreadLocal.withInitial(() -> Boolean.FALSE);
 
     private final CustomPlayerNametags plugin;
     private final NametagManager nametagManager;
@@ -62,19 +81,28 @@ public final class CustomPlayerNametagsExpansion extends PlaceholderExpansion {
 
     @Override
     public String onPlaceholderRequest(Player player, @NotNull String params) {
-        if (params.equalsIgnoreCase("format")) {
-            // The per-player/global effective format is meaningless without
-            // a specific player to resolve overrides and placeholders for.
-            return player == null ? "" : nametagManager.getEffectiveParsedFormat(player);
+        boolean known = params.equalsIgnoreCase("format") || params.equalsIgnoreCase("format_global");
+        if (!known) {
+            return null;
         }
-
-        if (params.equalsIgnoreCase("format_global")) {
+        if (Boolean.TRUE.equals(RESOLVING.get())) {
+            // Already resolving a format further up this same call stack —
+            // see RESOLVING. Resolve as empty rather than recursing.
+            return "";
+        }
+        RESOLVING.set(Boolean.TRUE);
+        try {
+            if (params.equalsIgnoreCase("format")) {
+                // The per-player/global effective format is meaningless without
+                // a specific player to resolve overrides and placeholders for.
+                return player == null ? "" : nametagManager.getEffectiveParsedFormat(player);
+            }
             // Always the global format. A player context is still passed
             // through (when available) so any player-specific placeholders
             // inside it resolve instead of coming back blank.
             return nametagManager.getGlobalParsedFormat(player);
+        } finally {
+            RESOLVING.set(Boolean.FALSE);
         }
-
-        return null;
     }
 }
