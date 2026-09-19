@@ -59,7 +59,7 @@ multiverse-passenger-mode-click-hover: "&7Runs: &f/mv config passenger-mode dism
 # -----------------------------------------------------------------------------------------------------------------------------
 
 
-# /nametags format set
+# /nametags format global set | /nametags format player set
 # ---------------------------------------------------------------------
 format-set-global-success: "&aUpdated the global nametag format."
 format-set-player-success: "&aUpdated &e{player}&a's nametag format."
@@ -86,6 +86,19 @@ format-groups-luckperms-missing: "&eWarning: LuckPerms isn't installed, so this 
 # -----------------------------------------------------------------------------------------
 
 
+# /nametags editor placeholders add|edit|remove
+# -----------------------------------------------------------------------------------------
+editor-placeholders-add-success: "&aAdded placeholder &f{placeholder}&a to the editor."
+editor-placeholders-add-exists: "&cPlaceholder &f{placeholder}&c is already in the editor — use &fedit&c to change its item title."
+editor-placeholders-add-invalid: "&c&f{placeholder}&c isn't a valid placeholder. It must start and end with &f%&c, like &f%player_ping%&c."
+editor-placeholders-edit-success: "&aChanged the item title of placeholder &f{placeholder}&a to &f{title}&a."
+editor-placeholders-edit-reset: "&aReset the item title of placeholder &f{placeholder}&a to its default."
+editor-placeholders-edit-not-found: "&cPlaceholder &f{placeholder}&c isn't in the editor — use &fadd&c to add it."
+editor-placeholders-remove-success: "&aRemoved placeholder &f{placeholder}&a from the editor."
+editor-placeholders-remove-not-found: "&cPlaceholder &f{placeholder}&c isn't in the editor."
+# -----------------------------------------------------------------------------------------
+
+
 # Command usage messages
 # ----------------------------------------------------------------------------------------------------------------
 usage-top-level:
@@ -94,6 +107,7 @@ usage-top-level:
   - "&f/{label} update &e- Check for plugin updates."
   - "&f/{label} format &e- Manage nametag formats (global, player, and LuckPerms group)."
   - "&f/{label} editor &e- Open the nametag format editor."
+  - "&f/{label} editor placeholders &e- Manage the placeholders shown in the editor."
   - "&f/{label} config &6[&fkey&6] &6[&fvalue&6] &e- View or change runtime-safe config.yml values."
 
 usage-format:
@@ -117,12 +131,6 @@ usage-format-player:
   - "&f/{label} format player view &6<&fplayer&6> &e- View a player's format."
   - "&6[&fannounce/silent&6] &7is accepted only when &fnametag-format-notify-mode &7is BOTH."
 
-usage-format-set:
-  - "&cUsages:"
-  - "&f/{label} format set global &6<&fformat&6> &e- Set the global format."
-  - "&f/{label} format set player &6[&fannounce/silent&6] &6<&fplayer&6> &6<&fformat&6> &e- Set a player's format."
-  - "&6[&fannounce/silent&6] &7is accepted only when &fnametag-format-notify-mode &7is BOTH."
-
 usage-format-groups:
   - "&cUsages:"
   - "&f/{label} format groups add &6[&fjava/bedrock&6] &6<&fgroup&6> &6<&fformat&6> &e- Create a group format (fails if one already exists)."
@@ -130,6 +138,18 @@ usage-format-groups:
   - "&f/{label} format groups remove &6[&fjava/bedrock&6] &6<&fgroup&6> &e- Remove a group format."
   - "&f/{label} format groups view &6[&fjava/bedrock&6] &6<&fgroup&6> &6[&fplayer&6] &e- View a group format, parsed for [player] if given."
   - "&6[&fjava/bedrock&6] &7is required only when &fenable-separate-bedrock-group-formats &7is true."
+
+usage-editor:
+  - "&cUsages:"
+  - "&f/{label} editor &e- Open the nametag format editor."
+  - "&f/{label} editor placeholders &e- Manage the placeholders shown in the editor."
+
+usage-editor-placeholders:
+  - "&cUsages:"
+  - "&f/{label} editor placeholders add &6<&fplaceholder&6> &6[&fitem title name&6] &e- Add a placeholder to the editor."
+  - "&f/{label} editor placeholders edit &6<&fplaceholder&6> &6[&fitem title name&6] &e- Change a placeholder's item title (resets it if omitted)."
+  - "&f/{label} editor placeholders remove &6<&fplaceholder&6> &e- Remove a placeholder from the editor."
+  - "&7A placeholder must start and end with &f%&7, like &f%player_ping%&7."
 
 # ----------------------------------------------------------------------------------------------------------------
 

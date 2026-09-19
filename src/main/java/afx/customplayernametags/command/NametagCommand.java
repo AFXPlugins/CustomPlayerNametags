@@ -2,6 +2,7 @@ package afx.customplayernametags.command;
 
 import afx.customplayernametags.CustomPlayerNametags;
 import afx.customplayernametags.config.ConfigManager;
+import afx.customplayernametags.config.EditorPlaceholderStore;
 import afx.customplayernametags.config.MessageManager;
 import afx.customplayernametags.format.NametagFormatPermissions;
 import afx.customplayernametags.manager.NametagDisplayManager;
@@ -129,12 +130,20 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             return handleFormatCommand(sender, label, args);
         }
 
-        if (args.length == 1 && args[0].equalsIgnoreCase("editor")) {
-            if (sender instanceof Player player) {
-                plugin.getNametagEditorManager().openAdminGui(player);
-            } else {
-                messages.send(sender, "player-only");
+        if (args.length >= 1 && args[0].equalsIgnoreCase("editor")) {
+            if (args.length == 1) {
+                if (sender instanceof Player player) {
+                    plugin.getNametagEditorManager().openAdminGui(player);
+                } else {
+                    messages.send(sender, "player-only");
+                }
+                return true;
             }
+            if (args[1].equalsIgnoreCase("placeholders")) {
+                return handleEditorPlaceholdersCommand(sender, label, args);
+            }
+            // "editor" was used with an unrecognized subcommand.
+            messages.sendList(sender, "usage-editor", "{label}", label);
             return true;
         }
 
@@ -148,15 +157,17 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
     }
 
     /**
-     * Handles the {@code /nametags format ...} family of subcommands. Every
-     * one of {@code set} and {@code reset} branches on a {@code global} or
-     * {@code player} target:
+     * Handles the {@code /nametags format ...} family of subcommands. The
+     * target ({@code global} or {@code player}) always comes before the
+     * action. The older target-last spellings ({@code format set global ...}
+     * and {@code format set player ...}) are no longer accepted and fall
+     * through to the usage overview.
      * <ul>
-     *   <li>{@code /nametags format set global "<format>"} — sets the
-     *       global {@code nametag-format}, persists it to config.yml, and
+     *   <li>{@code /nametags format global set [java|bedrock] "<format>"} — sets
+     *       the global {@code nametag-format}, persists it to config.yml, and
      *       refreshes every online player who has no per-player override.</li>
-     *   <li>{@code /nametags format set player <player> "<format>"} — sets a
-     *       per-player format override for {@code player}, replacing the
+     *   <li>{@code /nametags format player set [announce|silent] <player> "<format>"} —
+     *       sets a per-player format override for {@code player}, replacing the
      *       global format just for them, and refreshes their tag immediately.</li>
      *   <li>{@code /nametags format global reset [java|bedrock]} — resets the
      *       global format (or the Bedrock global format, when
@@ -170,7 +181,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
      * </ul>
      */
     private boolean handleFormatCommand(CommandSender sender, String label, String[] args) {
-        // Preferred concise syntax: /nametags format global set|reset|view [...]
+        // Syntax: /nametags format global set|reset|view [...]
         if (args.length >= 3 && args[1].equalsIgnoreCase("global")) {
             if (args[2].equalsIgnoreCase("reset")) {
                 // Same java/bedrock split as "global set" — platform is required only when a
@@ -223,7 +234,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
         }
-        // Preferred concise syntax: /nametags format player set|disable|view <player> [...]
+        // Syntax: /nametags format player set|disable|view <player> [...]
         if (args.length >= 3 && args[1].equalsIgnoreCase("player")) {
             if (args[2].equalsIgnoreCase("disable") && args.length == 4) {
                 Player target = Bukkit.getPlayerExact(args[3]);
@@ -252,53 +263,6 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                 return true;
             }
         }
-        if (args.length >= 2 && args[1].equalsIgnoreCase("set")) {
-            if (args.length >= 3 && args[2].equalsIgnoreCase("global")) {
-                String newFormat = joinAndUnquote(args, 3);
-                if (newFormat.isEmpty()) {
-                    messages.sendList(sender, "usage-format-set", "{label}", label);
-                    return true;
-                }
-
-                config.setGlobalFormat(newFormat);
-                nametagManager.refreshAll();
-                messages.send(sender, "format-set-global-success");
-                return true;
-            }
-
-            if (args.length >= 4 && args[2].equalsIgnoreCase("player")) {
-                // Same order as the concise spelling: [announce|silent] comes before <player>.
-                Boolean announceOverride = extractNotifyOverride(args, 3);
-                int playerIdx = announceOverride != null ? 4 : 3;
-                if (playerIdx >= args.length) {
-                    // "... player silent" with nothing after the word.
-                    messages.sendList(sender, "usage-format-set", "{label}", label);
-                    return true;
-                }
-                Player target = Bukkit.getPlayerExact(args[playerIdx]);
-                if (target == null) {
-                    messages.send(sender, "player-not-found");
-                    return true;
-                }
-
-                String newFormat = joinAndUnquote(args, playerIdx + 1);
-                if (newFormat.isEmpty()) {
-                    messages.sendList(sender, "usage-format-set", "{label}", label);
-                    return true;
-                }
-
-                nametagManager.setFormatOverride(target.getUniqueId(), newFormat);
-                notifyFormatChanged(sender, target, announceOverride, newFormat);
-                messages.send(sender, "format-set-player-success", "{player}", target.getName());
-                return true;
-            }
-
-            // "format set" was used, but with an unrecognized target — show
-            // just the "format set" usages.
-            messages.sendList(sender, "usage-format-set", "{label}", label);
-            return true;
-        }
-
         if (args.length >= 2 && args[1].equalsIgnoreCase("groups")) {
             return handleFormatGroupsCommand(sender, label, args);
         }
@@ -422,6 +386,83 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         }
 
         messages.sendList(sender, "usage-format-groups", "{label}", label);
+        return true;
+    }
+
+    /**
+     * Handles {@code /nametags editor placeholders add|edit|remove ...} — admin
+     * management of the preset placeholders players can pick from on the
+     * editor's "Select Placeholder" page (see {@link EditorPlaceholderStore}).
+     *
+     * <ul>
+     *   <li>{@code /nametags editor placeholders add <placeholder> [item title name]}
+     *       — adds a placeholder (e.g. {@code %player_ping%}) to the editor.
+     *       The optional title is the name shown on that placeholder's item;
+     *       if omitted, the placeholder's key is shown instead. Fails with
+     *       {@code editor-placeholders-add-exists} if it's already there —
+     *       use {@code edit} instead.</li>
+     *   <li>{@code /nametags editor placeholders edit <placeholder> [item title name]}
+     *       — changes the item title of an existing placeholder. Omitting the
+     *       title resets it to the default (the placeholder's key). Fails with
+     *       {@code editor-placeholders-edit-not-found} if it isn't there —
+     *       use {@code add} instead.</li>
+     *   <li>{@code /nametags editor placeholders remove <placeholder>} —
+     *       removes a placeholder from the editor.</li>
+     * </ul>
+     *
+     * <p>Unlike plain {@code /nametags editor}, none of these need a player
+     * sender, so they also work from the console. The editor reads the store
+     * live every time its placeholder page is opened, so nothing needs to be
+     * refreshed afterwards.
+     */
+    private boolean handleEditorPlaceholdersCommand(CommandSender sender, String label, String[] args) {
+        // args[0] = "editor", args[1] = "placeholders", args[2] = add|edit|remove,
+        // args[3] = <placeholder>, args[4...] = [item title name]
+        if (args.length < 4) {
+            messages.sendList(sender, "usage-editor-placeholders", "{label}", label);
+            return true;
+        }
+
+        String action = args[2].toLowerCase(Locale.ROOT);
+        String placeholder = args[3];
+        EditorPlaceholderStore store = plugin.getEditorPlaceholderStore();
+
+        switch (action) {
+            case "add" -> {
+                String title = joinAndUnquote(args, 4);
+                if (store.contains(placeholder)) {
+                    messages.send(sender, "editor-placeholders-add-exists", "{placeholder}", placeholder);
+                } else if (!store.add(placeholder, title.isEmpty() ? null : title)) {
+                    // Not already present, so the store only refuses a value that isn't %...%.
+                    messages.send(sender, "editor-placeholders-add-invalid", "{placeholder}", placeholder);
+                } else {
+                    messages.send(sender, "editor-placeholders-add-success", "{placeholder}", placeholder);
+                }
+            }
+            case "edit" -> {
+                String title = joinAndUnquote(args, 4);
+                if (!store.edit(placeholder, title.isEmpty() ? null : title)) {
+                    messages.send(sender, "editor-placeholders-edit-not-found", "{placeholder}", placeholder);
+                } else if (title.isEmpty()) {
+                    messages.send(sender, "editor-placeholders-edit-reset", "{placeholder}", placeholder);
+                } else {
+                    messages.send(sender, "editor-placeholders-edit-success",
+                            "{placeholder}", placeholder, "{title}", title);
+                }
+            }
+            case "remove" -> {
+                // Extra arguments after the placeholder are a usage mistake, not a
+                // missing placeholder — reporting "not found" for them would mislead.
+                if (args.length != 4) {
+                    messages.sendList(sender, "usage-editor-placeholders", "{label}", label);
+                } else if (!store.remove(placeholder)) {
+                    messages.send(sender, "editor-placeholders-remove-not-found", "{placeholder}", placeholder);
+                } else {
+                    messages.send(sender, "editor-placeholders-remove-success", "{placeholder}", placeholder);
+                }
+            }
+            default -> messages.sendList(sender, "usage-editor-placeholders", "{label}", label);
+        }
         return true;
     }
 
@@ -560,7 +601,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
     /**
      * Joins {@code args[fromIndex..]} back into a single string (spaces
      * restored between tokens) and strips one layer of surrounding double
-     * quotes if present, so {@code format set <player> "&6VIP &f{player}"}
+     * quotes if present, so {@code format player set <player> "&6VIP &f{player}"}
      * — which Bukkit splits into several whitespace-separated args — is
      * recovered as a single format string.
      */
@@ -611,10 +652,11 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
     /**
      * Tells {@code target} in chat that their individual nametag format was
      * just changed by someone else, per {@code nametag-format-notify-mode}
-     * (see {@link ConfigManager.NotifyMode}) — unless {@code target} has one
-     * of the {@code customplayernametags.notify.override.*} permissions
-     * explicitly set, which always wins over both the config default and
-     * (in BOTH mode) the command's own announce/silent argument.
+     * (see {@link ConfigManager.NotifyMode}) — unless {@code sender} (the
+     * person making the change) has one of the
+     * {@code customplayernametags.notify.override.*} permissions explicitly
+     * set, which always wins over both the config default and (in BOTH mode)
+     * the command's own announce/silent argument.
      */
     private void notifyFormatChanged(CommandSender sender, Player target, Boolean announceOverride, String newRawFormat) {
         if (target.getUniqueId().equals(sender instanceof Player p ? p.getUniqueId() : null)) {
@@ -626,7 +668,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             case BOTH -> announceOverride == null || announceOverride;
             case NOTIFY -> true;
         };
-        Boolean override = NametagFormatPermissions.notifyOverride(target);
+        Boolean override = NametagFormatPermissions.notifyOverride(sender);
         if (override != null) {
             notify = override;
         }
@@ -640,7 +682,8 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
      * just cleared by {@code sender} (via {@code /nametags format player
      * disable}), and whether they landed back on their group's format or
      * the plain global one. Mirrors {@link #notifyFormatChanged}'s
-     * self-change skip and {@code nametag-format-notify-mode} handling;
+     * self-change skip, {@code nametag-format-notify-mode} handling and
+     * {@code sender}'s {@code notify.override.*} permissions;
      * unlike {@code set}, {@code disable} has no per-command
      * announce/silent argument, so in {@code BOTH} mode this always
      * notifies.
@@ -651,7 +694,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         }
         ConfigManager.NotifyMode mode = config.getNotifyMode();
         boolean notify = mode != ConfigManager.NotifyMode.SILENT;
-        Boolean override = NametagFormatPermissions.notifyOverride(target);
+        Boolean override = NametagFormatPermissions.notifyOverride(sender);
         if (override != null) {
             notify = override;
         }
@@ -726,6 +769,21 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                     default -> completions.add(field.getter().get());
                 }
             }
+        } else if (args.length == 2 && args[0].equalsIgnoreCase("editor") && isAdmin) {
+            completions.add("placeholders");
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("editor")
+                && args[1].equalsIgnoreCase("placeholders") && isAdmin) {
+            completions.add("add");
+            completions.add("edit");
+            completions.add("remove");
+        } else if (args.length == 4 && args[0].equalsIgnoreCase("editor")
+                && args[1].equalsIgnoreCase("placeholders") && isAdmin
+                && (args[2].equalsIgnoreCase("edit") || args[2].equalsIgnoreCase("remove"))) {
+            // edit/remove only make sense on a placeholder that's already configured;
+            // add takes a brand-new one, so there's nothing useful to suggest for it.
+            for (EditorPlaceholderStore.Placeholder configured : plugin.getEditorPlaceholderStore().getAll()) {
+                completions.add(configured.value());
+            }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("format") && isAdmin) {
             completions.add("player");
             completions.add("global");
@@ -757,15 +815,6 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                     completions.add("announce");
                     completions.add("silent");
                 }
-            } else if (args[1].equalsIgnoreCase("set") && args[2].equalsIgnoreCase("player")) {
-                // Legacy "format set player [announce|silent] <player> <format>" spelling.
-                for (Player online : Bukkit.getOnlinePlayers()) {
-                    completions.add(online.getName());
-                }
-                if (config.getNotifyMode() == ConfigManager.NotifyMode.BOTH) {
-                    completions.add("announce");
-                    completions.add("silent");
-                }
             } else if (args[1].equalsIgnoreCase("global")
                     && (args[2].equalsIgnoreCase("set") || args[2].equalsIgnoreCase("reset") || args[2].equalsIgnoreCase("view"))
                     && config.isSeparateBedrockGlobalFormatEnabled()) {
@@ -792,11 +841,10 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         } else if (args.length == 5 && args[0].equalsIgnoreCase("format") && isAdmin
                 && config.getNotifyMode() == ConfigManager.NotifyMode.BOTH
                 && (args[3].equalsIgnoreCase("announce") || args[3].equalsIgnoreCase("silent"))
-                && ((args[1].equalsIgnoreCase("player") && args[2].equalsIgnoreCase("set"))
-                || (args[1].equalsIgnoreCase("set") && args[2].equalsIgnoreCase("player")))) {
-            // "format player set [announce|silent] <player> <format>" (and the legacy
-            // "format set player ..." spelling): once the optional word has been typed
-            // (BOTH mode only — see extractNotifyOverride), the player's name is next.
+                && args[1].equalsIgnoreCase("player") && args[2].equalsIgnoreCase("set")) {
+            // "format player set [announce|silent] <player> <format>": once the optional
+            // word has been typed (BOTH mode only — see extractNotifyOverride), the
+            // player's name is next.
             for (Player online : Bukkit.getOnlinePlayers()) {
                 completions.add(online.getName());
             }

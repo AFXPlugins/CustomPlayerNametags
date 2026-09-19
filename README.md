@@ -26,11 +26,11 @@ According to what I have researched, CustomPlayerNametags offers several feature
 
 - [PacketEvents](https://modrinth.com/plugin/packetevents) — required for the plugin to work.
 - [PlaceholderAPI](https://modrinth.com/plugin/placeholderapi) — needed for `%placeholders%` and global/group formats.
-- [LuckPerms](https://luckperms.net/) — needed only for group formats.
+- [LuckPerms](https://modrinth.com/plugin/luckperms) — needed only for group formats.
 
 ## Commands
 
-- `/nametags` — administrator commands for managing formats and settings.
+- `/nametags` — admin commands for managing formats and settings.
 - `/nametag` — player menu for viewing current format, editing permitted widgets, and toggling nametag visibility.
 
 > See the [wiki](https://afxplugins.github.io/documentation/customplayernametags/) for in-depth info on commands, permissions, editing formats, and more.

@@ -46,17 +46,22 @@ permissions:
     default: false
   customplayernametags.notify.override.notify:
     description: >-
-      Forces this player to always be told when someone else changes their
-      individual nametag format, regardless of nametag-format-notify-mode
-      (or the announce/silent argument in BOTH mode). Not granted by default.
-      Must be granted explicitly; a wildcard (* or customplayernametags.*)
-      does not grant it.
+      When this player changes someone else's individual nametag format
+      (via /nametags format player set|disable or the admin editor GUI), the
+      affected player is always told, regardless of
+      nametag-format-notify-mode (or the announce/silent argument in BOTH
+      mode). Checked on the player making the change, not the one whose
+      format changes. Not granted by default. Must be granted explicitly; a
+      wildcard (* or customplayernametags.*) does not grant it.
     default: false
   customplayernametags.notify.override.silent:
     description: >-
-      Forces this player to never be told when someone else changes their
-      individual nametag format, regardless of nametag-format-notify-mode
-      (or the announce/silent argument in BOTH mode). Takes priority over
+      When this player changes someone else's individual nametag format
+      (via /nametags format player set|disable or the admin editor GUI), the
+      affected player is never told, regardless of
+      nametag-format-notify-mode (or the announce/silent argument in BOTH
+      mode). Checked on the player making the change, not the one whose
+      format changes. Takes priority over
       customplayernametags.notify.override.notify if a player somehow has
       both. Not granted by default. Must be granted explicitly; a wildcard
       (* or customplayernametags.*) does not grant it.

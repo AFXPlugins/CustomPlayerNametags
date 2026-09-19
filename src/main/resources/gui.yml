@@ -71,6 +71,16 @@ players-menu:
     material: OAK_DOOR
     name: "&eBack"
     lore: []
+  previous-page:
+    slot: 48
+    material: ARROW
+    name: "&ePrevious Page"
+    lore: []
+  next-page:
+    slot: 50
+    material: ARROW
+    name: "&eNext Page"
+    lore: []
 
 groups-menu:
   title: "&8Select Group"
@@ -306,6 +316,16 @@ placeholders-menu:
     slot: 26
     material: OAK_DOOR
     name: "&eBack"
+    lore: []
+  previous-page:
+    slot: 21
+    material: ARROW
+    name: "&ePrevious Page"
+    lore: []
+  next-page:
+    slot: 23
+    material: ARROW
+    name: "&eNext Page"
     lore: []
 
 widget-toggles-menu:

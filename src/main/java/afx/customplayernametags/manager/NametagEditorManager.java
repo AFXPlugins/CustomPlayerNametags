@@ -82,6 +82,16 @@ public final class NametagEditorManager {
     private record Holder(UUID player, View view, int selected) implements InventoryHolder { public Inventory getInventory(){return null;} }
     /** One logical line (a run of chunks between newlines) of the chunk grid, in chunk-index order. */
     private record Row(List<Integer> indices) {}
+    /** Columns per inventory row — the bottom row of a paged list picker is kept for its previous/next arrows and Back button. */
+    private static final int MENU_COLUMNS = 9;
+    /**
+     * Where one page of a list picker (the player and placeholder select menus) falls.
+     * {@code paged} is false when every entry fits in the menu's ordinary slots, in which case there are no
+     * arrows and {@code start}/{@code end} cover everything that fits. Otherwise the entries are split over
+     * {@code pages} pages of {@code perPage} entries each, and {@code start}/{@code end} are the
+     * (end-exclusive) indices of the entries shown on {@code page} (0-based).
+     */
+    private record PickerPage(boolean paged, int page, int pages, int perPage, int start, int end) {}
     private static final int FORMAT_SLOTS = 45;
     /** Rows of chunk grid actually visible at once (45 slots / 9 columns). Formats with more logical lines than this scroll vertically via {@link Session#scrollRow}; a single line longer than 9 chunks scrolls horizontally via {@link Session#scrollCol}. */
     private static final int VISIBLE_ROWS = FORMAT_SLOTS / 9;
@@ -290,6 +300,15 @@ public final class NametagEditorManager {
         if(h.view==View.PLAYERS){
             int back=guiConfig.slot("players-menu","back",53);
             if(slot==back){openAdminGui(p);return;}
+            // A Holder page of -1 means the menu was drawn unpaged; 0 or more means it was drawn paged
+            // (see openPlayers), so the arrow slots are arrows rather than player heads.
+            int page=h.selected;
+            if(page>=0){
+                PickerPage pg=pickerPage(Bukkit.getOnlinePlayers().size(),page,0,back);
+                int target=pageArrowClick("players-menu",slot,back,pg);
+                if(target>=0){if(!pg.paged()||target!=page)openPlayers(p,target);return;}
+                if(pg.paged()&&slot>=pg.perPage())return;
+            }
             // Resolved from the clicked head itself rather than by re-indexing
             // Bukkit.getOnlinePlayers(): if anyone logs out between this menu
             // being drawn and being clicked, every later slot shifts by one and
@@ -381,14 +400,12 @@ public final class NametagEditorManager {
             return;
         }
         if(h.view==View.PLACEHOLDERS) {
-            List<EditorPlaceholderStore.Placeholder> all=placeholders.getAll();
             int back=guiConfig.slot("placeholders-menu","back",26);
             // Back returns to the "Add Format Piece" menu this was opened from, not straight past it
             // to the chunk editor.
             if(slot==back){openAddItemGui(p);return;}
-            if(slot==0){s.chunks.add(new Chunk(Kind.PLACEHOLDER,"{player}"));openEditor(p);return;}
-            int idx=slot-1;
-            if(idx>=0&&idx<back&&idx<all.size()){s.chunks.add(new Chunk(Kind.PLACEHOLDER,all.get(idx).value()));openEditor(p);}
+            String chosen=placeholderPickerClick(p,h,slot);
+            if(chosen!=null){s.chunks.add(new Chunk(Kind.PLACEHOLDER,chosen));openEditor(p);}
             return;
         }
         if(h.view==View.COLORS) {
@@ -488,14 +505,38 @@ public final class NametagEditorManager {
         if(h.view==View.WIDGET_PLACEHOLDERS){
             if(s.widgetIndex==null||s.widgetIndex>=s.chunks.size()||s.chunks.get(s.widgetIndex).kind!=Kind.WIDGET){s.widgetIndex=null;openEditor(p);return;}
             Chunk widget=s.chunks.get(s.widgetIndex);
-            List<EditorPlaceholderStore.Placeholder> all=placeholders.getAll();
             int back=guiConfig.slot("placeholders-menu","back",26);
             if(slot==back){openWidgetContents(p,s.widgetIndex);return;}
-            if(slot==0){widget.widgetContents.add(new Chunk(Kind.PLACEHOLDER,"{player}"));resyncWidget(widget);openWidgetContents(p,s.widgetIndex);return;}
-            int idx=slot-1;
-            if(idx>=0&&idx<back&&idx<all.size()){widget.widgetContents.add(new Chunk(Kind.PLACEHOLDER,all.get(idx).value()));resyncWidget(widget);openWidgetContents(p,s.widgetIndex);}
+            String chosen=placeholderPickerClick(p,h,slot);
+            if(chosen!=null){widget.widgetContents.add(new Chunk(Kind.PLACEHOLDER,chosen));resyncWidget(widget);openWidgetContents(p,s.widgetIndex);}
             return;
         }
+    }
+    /**
+     * Click handling shared by both placeholder pickers ({@link View#PLACEHOLDERS} and {@link View#WIDGET_PLACEHOLDERS}),
+     * apart from Back, which goes somewhere different for each. Returns the placeholder the player picked —
+     * the pinned {@code {player}} entry in slot 0, or one of the configured placeholders — or {@code null} if
+     * the click didn't pick anything, including a click on a previous/next arrow, which is handled here by
+     * reopening the picker on the new page.
+     */
+    private String placeholderPickerClick(Player p,Holder h,int slot){
+        if(slot==0)return "{player}";
+        List<EditorPlaceholderStore.Placeholder> all=placeholders.getAll();
+        int back=guiConfig.slot("placeholders-menu","back",26);
+        int page=h.selected;
+        if(page>=0){
+            // Drawn paged (see openPlaceholderPicker): the arrow slots are arrows, and every entry's
+            // index is offset by the page it's on.
+            PickerPage pg=pickerPage(all.size(),page,1,back);
+            int target=pageArrowClick("placeholders-menu",slot,back,pg);
+            if(target>=0){if(!pg.paged()||target!=page)openPlaceholderPicker(p,h.view,target);return null;}
+            if(pg.paged()){
+                int idx=pg.start()+(slot-1);
+                return slot>=1&&slot<=pg.perPage()&&idx<all.size()?all.get(idx).value():null;
+            }
+        }
+        int idx=slot-1;
+        return idx>=0&&idx<back&&idx<all.size()?all.get(idx).value():null;
     }
     /** The online player whose name is on {@code head}, or {@code null} if there isn't one (empty slot, or they logged off since the menu was drawn). */
     private static Player playerFromHead(ItemStack head){
@@ -681,12 +722,24 @@ public final class NametagEditorManager {
         put(inv,guiConfig.button("add-item-menu","back",22,Material.OAK_DOOR,"&eBack"));
         p.openInventory(inv);
     }
-    private void openPlaceholders(Player p){
-        Inventory inv=Bukkit.createInventory(new Holder(p.getUniqueId(),View.PLACEHOLDERS,-1),27,guiConfig.title("placeholders-menu",ChatColor.DARK_BLUE+"Select Placeholder"));
-        inv.setItem(0,usernamePlaceholderItem(p));
+    private void openPlaceholders(Player p){ openPlaceholderPicker(p,View.PLACEHOLDERS,0); }
+    /**
+     * Draws page {@code page} (0-based) of the placeholder picker for {@code view} — either
+     * {@link View#PLACEHOLDERS} or {@link View#WIDGET_PLACEHOLDERS}, which are the same menu adding into
+     * different places. The pinned {@code {player}} entry in slot 0 shows on every page. Once the configured
+     * placeholders no longer fit, the picker turns paged: previous/next arrows appear on the bottom row
+     * (see {@link #pickerPage}), and the Holder carries the page number so a click can tell it's a paged
+     * menu; an unpaged one carries -1.
+     */
+    private void openPlaceholderPicker(Player p,View view,int page){
         int back=guiConfig.slot("placeholders-menu","back",26);
-        int i=1;for(var x:placeholders.getAll()){if(i>=back)break;inv.setItem(i++,placeholderItem(p,x));}
+        List<EditorPlaceholderStore.Placeholder> all=placeholders.getAll();
+        PickerPage pg=pickerPage(all.size(),page,1,back);
+        Inventory inv=Bukkit.createInventory(new Holder(p.getUniqueId(),view,pg.paged()?pg.page():-1),27,guiConfig.title("placeholders-menu",ChatColor.DARK_BLUE+"Select Placeholder"));
+        inv.setItem(0,usernamePlaceholderItem(p));
+        for(int n=pg.start();n<pg.end();n++)inv.setItem(1+n-pg.start(),placeholderItem(p,all.get(n)));
         put(inv,guiConfig.button("placeholders-menu","back",26,Material.OAK_DOOR,"&eBack"));
+        if(pg.paged())putPageArrows(inv,"placeholders-menu",back,pg);
         p.openInventory(inv);
     }
     /**
@@ -839,14 +892,7 @@ public final class NametagEditorManager {
         p.openInventory(inv);
     }
     /** Same picker as {@link #openPlaceholders}, but adding into the currently-open widget's contents instead of the top-level format — see {@link View#WIDGET_PLACEHOLDERS}. */
-    private void openWidgetPlaceholders(Player p){
-        Inventory inv=Bukkit.createInventory(new Holder(p.getUniqueId(),View.WIDGET_PLACEHOLDERS,-1),27,guiConfig.title("placeholders-menu",ChatColor.DARK_BLUE+"Select Placeholder"));
-        inv.setItem(0,usernamePlaceholderItem(p));
-        int back=guiConfig.slot("placeholders-menu","back",26);
-        int i=1;for(var x:placeholders.getAll()){if(i>=back)break;inv.setItem(i++,placeholderItem(p,x));}
-        put(inv,guiConfig.button("placeholders-menu","back",26,Material.OAK_DOOR,"&eBack"));
-        p.openInventory(inv);
-    }
+    private void openWidgetPlaceholders(Player p){ openPlaceholderPicker(p,View.WIDGET_PLACEHOLDERS,0); }
     /**
      * Saves whatever's currently in the editor. A line (or per-line
      * {@code {chars N}} override, or a widget's own {@code limit=}) longer
@@ -897,7 +943,8 @@ public final class NametagEditorManager {
     /**
      * Tells the target player in chat that their individual nametag format
      * was just changed by another player through this editor, per
-     * {@code nametag-format-notify-mode} — see
+     * {@code nametag-format-notify-mode} (or the editor's own
+     * {@code customplayernametags.notify.override.*} permission) — see
      * {@link afx.customplayernametags.command.NametagCommand#notifyFormatChanged}
      * for the equivalent command-driven path. The GUI editor has no
      * announce/silent argument, so BOTH mode simply defaults to notifying,
@@ -907,7 +954,7 @@ public final class NametagEditorManager {
         Player target = Bukkit.getPlayer(UUID.fromString(targetId));
         if (target == null || target.getUniqueId().equals(editor.getUniqueId())) return;
         boolean notify = config.getNotifyMode() != ConfigManager.NotifyMode.SILENT;
-        Boolean override = NametagFormatPermissions.notifyOverride(target);
+        Boolean override = NametagFormatPermissions.notifyOverride(editor);
         if (override != null) notify = override;
         if (notify) target.sendMessage(manager.buildFormatChangedNotify(config, editor, target, newRawFormat));
     }
@@ -935,15 +982,20 @@ public final class NametagEditorManager {
         put(i,guiConfig.button("groups-platform-choice-menu","back",22,Material.OAK_DOOR,"&eBack"));
         p.openInventory(i);
     }
-    private void openPlayers(Player p){
-        Inventory i=Bukkit.createInventory(new Holder(p.getUniqueId(),View.PLAYERS,-1),54,guiConfig.title("players-menu",ChatColor.DARK_BLUE+"Select Player"));
+    private void openPlayers(Player p){ openPlayers(p,0); }
+    /**
+     * Draws page {@code page} (0-based) of the online-player list. Once there are more players than fit,
+     * the list turns paged: previous/next arrows appear on the bottom row (see {@link #pickerPage}), and the
+     * Holder carries the page number so a click can tell it's a paged menu; an unpaged one carries -1.
+     */
+    private void openPlayers(Player p,int page){
         int back=guiConfig.slot("players-menu","back",53);
-        int slot=0;
-        for(Player q:Bukkit.getOnlinePlayers()){
-            if(slot>=back)break;
-            i.setItem(slot++,item(Material.PLAYER_HEAD,ChatColor.AQUA+q.getName()));
-        }
+        List<Player> online=new ArrayList<>(Bukkit.getOnlinePlayers());
+        PickerPage pg=pickerPage(online.size(),page,0,back);
+        Inventory i=Bukkit.createInventory(new Holder(p.getUniqueId(),View.PLAYERS,pg.paged()?pg.page():-1),54,guiConfig.title("players-menu",ChatColor.DARK_BLUE+"Select Player"));
+        for(int n=pg.start();n<pg.end();n++)i.setItem(n-pg.start(),item(Material.PLAYER_HEAD,ChatColor.AQUA+online.get(n).getName()));
         put(i,guiConfig.button("players-menu","back",53,Material.OAK_DOOR,"&eBack"));
+        if(pg.paged())putPageArrows(i,"players-menu",back,pg);
         p.openInventory(i);
     }
     /**
@@ -1076,6 +1128,40 @@ public final class NametagEditorManager {
     }
     private static Material materialFor(String value){String v=value.toLowerCase(Locale.ROOT);if(v.contains("rainbow"))return Material.FIREWORK_STAR;if(v.contains("gradient"))return Material.NAUTILUS_SHELL;if(v.contains("red"))return Material.RED_WOOL;if(v.contains("blue"))return Material.BLUE_WOOL;if(v.contains("green"))return Material.GREEN_WOOL;if(v.contains("yellow")||v.contains("gold"))return Material.YELLOW_WOOL;if(v.contains("purple"))return Material.PURPLE_WOOL;if(v.contains("aqua"))return Material.CYAN_WOOL;if(v.contains("black"))return Material.BLACK_WOOL;if(v.contains("white"))return Material.WHITE_WOOL;if(v.contains("gray"))return Material.GRAY_WOOL;return Material.ORANGE_WOOL;}
     private static ItemStack item(Material m,String name,String... lore){ItemStack s=new ItemStack(m);ItemMeta meta=s.getItemMeta();meta.setDisplayName(name);if(lore.length>0)meta.setLore(Arrays.asList(lore));s.setItemMeta(meta);return s;}
+    /**
+     * Works out which entries of a {@code total}-entry list picker to show on {@code requestedPage}.
+     * A picker only becomes paged once its entries no longer fit in the slots between {@code first} (the
+     * first slot entries may use — 1 for the placeholder pickers, whose slot 0 is pinned) and {@code back}
+     * (the Back button, always the last slot). From then on the entries only use the rows above the
+     * bottom row, which is freed up for the arrows, and {@code requestedPage} is clamped into range.
+     */
+    private static PickerPage pickerPage(int total,int requestedPage,int first,int back){
+        int unpaged=Math.max(0,back-first);
+        int perPage=(back/MENU_COLUMNS)*MENU_COLUMNS-first;
+        if(total<=unpaged||perPage<1)return new PickerPage(false,0,1,unpaged,0,Math.min(total,unpaged));
+        int pages=(total+perPage-1)/perPage;
+        int page=Math.max(0,Math.min(requestedPage,pages-1));
+        int start=page*perPage;
+        return new PickerPage(true,page,pages,perPage,start,Math.min(total,start+perPage));
+    }
+    /** Draws a paged picker's previous/next arrows, dimming whichever one has nowhere to go — same look as the editor's scroll arrows. */
+    private void putPageArrows(Inventory inv,String menuKey,int back,PickerPage pg){
+        int rowStart=(back/MENU_COLUMNS)*MENU_COLUMNS;
+        GuiConfigManager.Button prev=guiConfig.button(menuKey,"previous-page",rowStart+3,Material.ARROW,"&ePrevious Page");
+        GuiConfigManager.Button next=guiConfig.button(menuKey,"next-page",rowStart+5,Material.ARROW,"&eNext Page");
+        String info=ChatColor.GRAY+"Page "+(pg.page()+1)+" of "+pg.pages();
+        List<String> prevLore=new ArrayList<>(prev.lore()); prevLore.add(info);
+        List<String> nextLore=new ArrayList<>(next.lore()); nextLore.add(info);
+        inv.setItem(prev.slot(),item(prev.material(),(pg.page()>0?ChatColor.YELLOW:ChatColor.DARK_GRAY)+ChatColor.stripColor(prev.name()),prevLore.toArray(new String[0])));
+        inv.setItem(next.slot(),item(next.material(),(pg.page()<pg.pages()-1?ChatColor.YELLOW:ChatColor.DARK_GRAY)+ChatColor.stripColor(next.name()),nextLore.toArray(new String[0])));
+    }
+    /** If {@code slot} is a paged picker's previous/next arrow, the page to go to (clamped, so possibly the current page); otherwise -1. */
+    private int pageArrowClick(String menuKey,int slot,int back,PickerPage pg){
+        int rowStart=(back/MENU_COLUMNS)*MENU_COLUMNS;
+        if(slot==guiConfig.slot(menuKey,"previous-page",rowStart+3))return Math.max(0,pg.page()-1);
+        if(slot==guiConfig.slot(menuKey,"next-page",rowStart+5))return Math.min(pg.pages()-1,pg.page()+1);
+        return -1;
+    }
     /** Renders a configured button into {@code inv} at its own configured slot. */
     private static void put(Inventory inv, GuiConfigManager.Button b){ inv.setItem(b.slot(), item(b.material(), b.name(), b.loreArray())); }
     private static List<Chunk> parse(String raw){List<Chunk> out=new ArrayList<>();if(raw==null)return out;Matcher m=TOKEN.matcher(raw);int last=0;while(m.find()){if(m.start()>last)out.add(new Chunk(Kind.TEXT,raw.substring(last,m.start())));out.add(parseToken(m.group()));last=m.end();}if(last<raw.length())out.add(new Chunk(Kind.TEXT,raw.substring(last)));return out;}
