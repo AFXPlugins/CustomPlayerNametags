@@ -20,6 +20,7 @@ import afx.customplayernametags.manager.NametagDisplayManager;
 import afx.customplayernametags.manager.NametagEditorManager;
 import afx.customplayernametags.manager.NametagManager;
 import afx.customplayernametags.placeholder.CustomPlayerNametagsExpansion;
+import afx.customplayernametags.storage.InstallHistory;
 import afx.customplayernametags.update.UpdateChecker;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bstats.bukkit.Metrics;
@@ -68,6 +69,7 @@ public final class CustomPlayerNametags extends JavaPlugin {
     private NametagEditorManager nametagEditorManager;
     private UpdateChecker updateChecker;
     private Metrics metrics;
+    private InstallHistory installHistory;
 
     @Override
     public void onLoad() {
@@ -82,6 +84,10 @@ public final class CustomPlayerNametags extends JavaPlugin {
     @Override
     public void onEnable() {
         PacketEvents.getAPI().init();
+
+        // Must run before updateConfigFile()/saveDefaultConfig(): it tells an
+        // update from a fresh install by whether config.yml already exists.
+        this.installHistory = new InstallHistory(this);
 
         updateConfigFile();
         saveDefaultConfig();
@@ -202,6 +208,12 @@ public final class CustomPlayerNametags extends JavaPlugin {
                 () -> MultiverseIntegration.isPortalsAvailable() ? "Yes" : "No"));
         metrics.addCustomChart(new SimplePie("widget_item_in_use",
                 () -> isWidgetItemInUse() ? "Yes" : "No"));
+        // "Yes" = this version was reached by updating from an earlier one;
+        // "No" = fresh install. See InstallHistory.
+        metrics.addCustomChart(new SimplePie("updated_from_previous_version",
+                () -> installHistory.wasUpdatedFromPreviousVersion() ? "Yes" : "No"));
+        metrics.addCustomChart(new SimplePie("widget_truncate_indicator_enabled",
+                () -> configManager.isWidgetTruncationEllipsisEnabled() ? "Yes" : "No"));
     }
 
     /**

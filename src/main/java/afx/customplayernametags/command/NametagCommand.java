@@ -3,6 +3,7 @@ package afx.customplayernametags.command;
 import afx.customplayernametags.CustomPlayerNametags;
 import afx.customplayernametags.config.ConfigManager;
 import afx.customplayernametags.config.MessageManager;
+import afx.customplayernametags.format.NametagFormatPermissions;
 import afx.customplayernametags.manager.NametagDisplayManager;
 import afx.customplayernametags.manager.NametagManager;
 import afx.customplayernametags.update.UpdateChecker;
@@ -178,11 +179,11 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                 int resetIdx = 3; boolean bedrockReset = false;
                 if (separateReset) {
                     if (args.length <= resetIdx || (!args[resetIdx].equalsIgnoreCase("java") && !args[resetIdx].equalsIgnoreCase("bedrock"))) {
-                        messages.sendList(sender, "usage-format", "{label}", label); return true;
+                        sendFormatUsage(sender, label, args); return true;
                     }
                     bedrockReset = args[resetIdx++].equalsIgnoreCase("bedrock");
                 }
-                if (args.length != resetIdx) { messages.sendList(sender, "usage-format", "{label}", label); return true; }
+                if (args.length != resetIdx) { sendFormatUsage(sender, label, args); return true; }
                 if (bedrockReset) { config.resetBedrockGlobalFormat(); } else { config.resetGlobalFormat(); }
                 nametagManager.refreshAll(); messages.send(sender, "format-reset-global-success"); return true;
             }
@@ -194,12 +195,12 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                 int idx = 3; boolean bedrock = false;
                 if (separateGlobal) {
                     if (args.length <= idx || (!args[idx].equalsIgnoreCase("java") && !args[idx].equalsIgnoreCase("bedrock"))) {
-                        messages.sendList(sender, "usage-format", "{label}", label); return true;
+                        sendFormatUsage(sender, label, args); return true;
                     }
                     bedrock = args[idx++].equalsIgnoreCase("bedrock");
                 }
                 String value = joinAndUnquote(args, idx);
-                if (value.isEmpty()) { messages.sendList(sender, "usage-format", "{label}", label); return true; }
+                if (value.isEmpty()) { sendFormatUsage(sender, label, args); return true; }
                 if (bedrock) { config.setBedrockGlobalFormat(value); } else { config.setGlobalFormat(value); }
                 nametagManager.refreshAll(); messages.send(sender, "format-set-global-success"); return true;
             }
@@ -209,7 +210,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                 int viewIdx = 3; boolean bedrockGlobalView = false;
                 if (separateGlobalView) {
                     if (args.length <= viewIdx || (!args[viewIdx].equalsIgnoreCase("java") && !args[viewIdx].equalsIgnoreCase("bedrock"))) {
-                        messages.sendList(sender, "usage-format", "{label}", label); return true;
+                        sendFormatUsage(sender, label, args); return true;
                     }
                     bedrockGlobalView = args[viewIdx++].equalsIgnoreCase("bedrock");
                 }
@@ -232,12 +233,14 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                 messages.send(sender, "format-reset-player-success", "{player}", target.getName()); return true;
             }
             if (args[2].equalsIgnoreCase("set") && args.length >= 5) {
-                Player target = Bukkit.getPlayerExact(args[3]);
+                // Syntax: format player set [announce|silent] <player> <format> — the optional
+                // word (BOTH mode only) comes first, so the player's name shifts one slot right.
+                Boolean announceOverride = extractNotifyOverride(args, 3);
+                int playerIdx = announceOverride != null ? 4 : 3;
+                Player target = Bukkit.getPlayerExact(args[playerIdx]);
                 if (target == null) { messages.send(sender, "player-not-found"); return true; }
-                Boolean announceOverride = extractNotifyOverride(args, 4);
-                int formatStart = announceOverride != null ? 5 : 4;
-                String value = joinAndUnquote(args, formatStart);
-                if (value.isEmpty()) { messages.sendList(sender, "usage-format", "{label}", label); return true; }
+                String value = joinAndUnquote(args, playerIdx + 1);
+                if (value.isEmpty()) { sendFormatUsage(sender, label, args); return true; }
                 nametagManager.setFormatOverride(target.getUniqueId(), value);
                 notifyFormatChanged(sender, target, announceOverride, value);
                 messages.send(sender, "format-set-player-success", "{player}", target.getName()); return true;
@@ -264,15 +267,21 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             }
 
             if (args.length >= 4 && args[2].equalsIgnoreCase("player")) {
-                Player target = Bukkit.getPlayerExact(args[3]);
+                // Same order as the concise spelling: [announce|silent] comes before <player>.
+                Boolean announceOverride = extractNotifyOverride(args, 3);
+                int playerIdx = announceOverride != null ? 4 : 3;
+                if (playerIdx >= args.length) {
+                    // "... player silent" with nothing after the word.
+                    messages.sendList(sender, "usage-format-set", "{label}", label);
+                    return true;
+                }
+                Player target = Bukkit.getPlayerExact(args[playerIdx]);
                 if (target == null) {
                     messages.send(sender, "player-not-found");
                     return true;
                 }
 
-                Boolean announceOverride = extractNotifyOverride(args, 4);
-                int formatStart = announceOverride != null ? 5 : 4;
-                String newFormat = joinAndUnquote(args, formatStart);
+                String newFormat = joinAndUnquote(args, playerIdx + 1);
                 if (newFormat.isEmpty()) {
                     messages.sendList(sender, "usage-format-set", "{label}", label);
                     return true;
@@ -295,10 +304,28 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         }
 
         // "format" was used, but with an unrecognized (or missing)
-        // subcommand — show just the "format" usages (set/reset),
-        // not every leaf command underneath them.
-        messages.sendList(sender, "usage-format", "{label}", label);
+        // subcommand — show the usage for whichever target was named
+        // (global/player), or a short overview of all targets.
+        sendFormatUsage(sender, label, args);
         return true;
+    }
+
+    /**
+     * Sends the most specific {@code /nametags format} usage block for what
+     * the sender typed: the {@code global} or {@code player} block when that
+     * target was named, otherwise a short overview of every target.
+     * ({@code groups} is handled separately and sends its own usage block.)
+     */
+    private void sendFormatUsage(CommandSender sender, String label, String[] args) {
+        String key = "usage-format";
+        if (args.length >= 2) {
+            if (args[1].equalsIgnoreCase("global")) {
+                key = "usage-format-global";
+            } else if (args[1].equalsIgnoreCase("player")) {
+                key = "usage-format-player";
+            }
+        }
+        messages.sendList(sender, key, "{label}", label);
     }
 
     /**
@@ -558,9 +585,9 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
 
     /**
      * Reads an optional {@code announce}/{@code silent} argument placed
-     * right after the target player's name — before the format itself — in
+     * right after {@code set} — before the target player's name — in
      * a {@code /nametags format player set}-style command, e.g.
-     * {@code /nametags format player set <player> silent <format>}. Only
+     * {@code /nametags format player set silent <player> <format>}. Only
      * meaningful when {@code nametag-format-notify-mode} is
      * {@link ConfigManager.NotifyMode#BOTH}, since that word only exists in
      * that mode. Returns {@code null} (no override — fall back to the
@@ -599,12 +626,9 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             case BOTH -> announceOverride == null || announceOverride;
             case NOTIFY -> true;
         };
-        if (target.isPermissionSet("customplayernametags.notify.override.silent")
-                && target.hasPermission("customplayernametags.notify.override.silent")) {
-            notify = false;
-        } else if (target.isPermissionSet("customplayernametags.notify.override.notify")
-                && target.hasPermission("customplayernametags.notify.override.notify")) {
-            notify = true;
+        Boolean override = NametagFormatPermissions.notifyOverride(target);
+        if (override != null) {
+            notify = override;
         }
         if (notify) {
             target.sendMessage(nametagManager.buildFormatChangedNotify(config, sender, target, newRawFormat));
@@ -627,12 +651,9 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         }
         ConfigManager.NotifyMode mode = config.getNotifyMode();
         boolean notify = mode != ConfigManager.NotifyMode.SILENT;
-        if (target.isPermissionSet("customplayernametags.notify.override.silent")
-                && target.hasPermission("customplayernametags.notify.override.silent")) {
-            notify = false;
-        } else if (target.isPermissionSet("customplayernametags.notify.override.notify")
-                && target.hasPermission("customplayernametags.notify.override.notify")) {
-            notify = true;
+        Boolean override = NametagFormatPermissions.notifyOverride(target);
+        if (override != null) {
+            notify = override;
         }
         if (notify) {
             boolean group = nametagManager.hasGroupFormat(target);
@@ -730,6 +751,21 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                 for (Player online : Bukkit.getOnlinePlayers()) {
                     completions.add(online.getName());
                 }
+                if (args[2].equalsIgnoreCase("set") && config.getNotifyMode() == ConfigManager.NotifyMode.BOTH) {
+                    // "format player set [announce|silent] <player> <format>" — the optional
+                    // word goes first, so it's offered alongside the player names here.
+                    completions.add("announce");
+                    completions.add("silent");
+                }
+            } else if (args[1].equalsIgnoreCase("set") && args[2].equalsIgnoreCase("player")) {
+                // Legacy "format set player [announce|silent] <player> <format>" spelling.
+                for (Player online : Bukkit.getOnlinePlayers()) {
+                    completions.add(online.getName());
+                }
+                if (config.getNotifyMode() == ConfigManager.NotifyMode.BOTH) {
+                    completions.add("announce");
+                    completions.add("silent");
+                }
             } else if (args[1].equalsIgnoreCase("global")
                     && (args[2].equalsIgnoreCase("set") || args[2].equalsIgnoreCase("reset") || args[2].equalsIgnoreCase("view"))
                     && config.isSeparateBedrockGlobalFormatEnabled()) {
@@ -752,6 +788,17 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
                 } else {
                     completions.addAll(groupNameCompletions(args[2], false));
                 }
+            }
+        } else if (args.length == 5 && args[0].equalsIgnoreCase("format") && isAdmin
+                && config.getNotifyMode() == ConfigManager.NotifyMode.BOTH
+                && (args[3].equalsIgnoreCase("announce") || args[3].equalsIgnoreCase("silent"))
+                && ((args[1].equalsIgnoreCase("player") && args[2].equalsIgnoreCase("set"))
+                || (args[1].equalsIgnoreCase("set") && args[2].equalsIgnoreCase("player")))) {
+            // "format player set [announce|silent] <player> <format>" (and the legacy
+            // "format set player ..." spelling): once the optional word has been typed
+            // (BOTH mode only — see extractNotifyOverride), the player's name is next.
+            for (Player online : Bukkit.getOnlinePlayers()) {
+                completions.add(online.getName());
             }
         } else if (args.length == 5 && args[0].equalsIgnoreCase("format") && args[1].equalsIgnoreCase("global")
                 && isAdmin && args[2].equalsIgnoreCase("view")

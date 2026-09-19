@@ -19,7 +19,7 @@ import java.sql.SQLException;
  * ({@code player-formats.db}, {@code nametag-presets.db},
  * {@code nametag-toggles.db}) and the remaining YAML files
  * ({@code messages.yml}, {@code gui.yml}, {@code group-formats.yml},
- * {@code editor-placeholders.yml}).
+ * {@code editor-placeholders.yml}, {@code install-info.yml}).
  */
 public final class StorageFiles {
 

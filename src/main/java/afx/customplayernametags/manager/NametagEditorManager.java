@@ -103,12 +103,10 @@ public final class NametagEditorManager {
         /** True while the sign editor is open collecting a text chunk — see {@link #openSignInput} and {@link #handleSignChange}. */
         boolean awaitingSign;
         BlockState temporarySign;
-        /** What the currently-open sign editor's submitted text means: {@code null} for a plain format-text chunk, {@code "widget-text"} for text being added inside a widget's slot, {@code "widget-edit-text"} for replacing an existing widget TEXT item (see {@link #widgetEditIndex}), or {@code "widget-character-limit"} for the widget-toggles-menu's per-widget character limit entry — see {@link #handleSignChange}. */
+        /** What the currently-open sign editor's submitted text means: {@code null} for a plain format-text chunk, {@code "widget-text"} for text being added inside a widget's slot, or {@code "widget-character-limit"} for the widget-toggles-menu's per-widget character limit entry — see {@link #handleSignChange}. */
         String signMode;
         /** Index into {@link #chunks} of the WIDGET chunk currently open on a WIDGET_* view — including the WIDGET_TOGGLES page when it's editing that widget's existing permissions rather than configuring a brand-new one — or {@code null} outside those views/while creating a new widget. See {@link #openWidgetToggles} and {@link #openWidgetPermissions}. */
         Integer widgetIndex;
-        /** Index into the open widget's {@code widgetContents} whose TEXT is being replaced by the sign editor opened from widget-item-detail-menu's "Edit" button — see {@link #handleSignChange}. {@code null} outside that flow. */
-        Integer widgetEditIndex;
         /** Pending allowed-item-type toggles and character limit for a brand-new (or being-re-permissioned) widget, shown on the WIDGET_TOGGLES page before they're actually applied — see {@link #openWidgetToggles}/{@link #openWidgetPermissions}. */
         boolean pendingWidgetColors = true, pendingWidgetPlaceholders = true, pendingWidgetText = true;
         int pendingWidgetCharacterLimit = -1;
@@ -154,10 +152,6 @@ public final class NametagEditorManager {
     private void openWidgetTextSign(Player p, Session s) {
         s.signMode="widget-text"; openSignInput(p,s,new String[]{"Enter text","","",""});
     }
-    /** Opens the sign editor to replace an existing TEXT item inside a widget's contents — any player, from widget-item-detail-menu's "Edit" button. See {@link #handleSignChange}. */
-    private void openWidgetTextEditSign(Player p, Session s, int subIndex) {
-        s.widgetEditIndex=subIndex; s.signMode="widget-edit-text"; openSignInput(p,s,new String[]{"Enter text","","",""});
-    }
     private void openSignInput(Player p, Session s, String[] lines) {
         Block block=findTemporarySignBlock(p);
         if(block==null){
@@ -183,8 +177,8 @@ public final class NametagEditorManager {
         String entered=text.toString().trim(); String mode=s.signMode; s.signMode=null;
         if("widget-character-limit".equals(mode)){
             // Blank input (or anything that doesn't parse) means "no limit" — unlike the
-            // widget-text/widget-edit-text flows there's no reason to bounce the player back to
-            // re-enter it, since -1 (unlimited) is a perfectly valid, common choice here.
+            // widget-text flow there's no reason to bounce the player back to re-enter it,
+            // since -1 (unlimited) is a perfectly valid, common choice here.
             int n; try{n=Integer.parseInt(entered.replaceAll("[^0-9]",""));}catch(NumberFormatException e){n=-1;}
             int limit=entered.isEmpty()?-1:n;
             s.pendingWidgetCharacterLimit=limit;
@@ -197,18 +191,6 @@ public final class NametagEditorManager {
                 String sanitized=sanitizeWidgetText(entered,widget);
                 if(!sanitized.isBlank())widget.widgetContents.add(new Chunk(Kind.TEXT,sanitized));
                 resyncWidget(widget);
-            }
-            int reopen=wi==null?-1:wi;
-            Bukkit.getScheduler().runTask(plugin,()->openWidgetContents(p,reopen)); return;
-        }
-        if("widget-edit-text".equals(mode)){
-            Integer wi=s.widgetIndex; Integer ei=s.widgetEditIndex; s.widgetEditIndex=null;
-            if(wi!=null&&wi<s.chunks.size()&&s.chunks.get(wi).kind==Kind.WIDGET){
-                Chunk widget=s.chunks.get(wi);
-                if(ei!=null&&ei>=0&&ei<widget.widgetContents.size()&&widget.widgetContents.get(ei).kind==Kind.TEXT){
-                    String sanitized=sanitizeWidgetText(entered,widget);
-                    if(!sanitized.isBlank()){widget.widgetContents.get(ei).value=sanitized;resyncWidget(widget);}
-                }
             }
             int reopen=wi==null?-1:wi;
             Bukkit.getScheduler().runTask(plugin,()->openWidgetContents(p,reopen)); return;
@@ -233,9 +215,20 @@ public final class NametagEditorManager {
      * string length, so a color code like {@code &c} (2 raw characters,
      * 0 visible ones) doesn't eat into a player's actual typing room.
      * Truncation itself likewise cuts on visible characters, keeping
-     * whatever color/style was applied to each kept character intact.
+     * whatever color/style was applied to each kept character intact,
+     * and — same as every other truncation in the plugin, now that a
+     * {@code "..."} indicator is never counted against the limit it
+     * signals — gets the same plain white {@code "..."} appended as any
+     * other over-limit widget content, gated behind the same {@code
+     * nametag-widget-truncate-indicator} setting
+     * ({@link afx.customplayernametags.config.ConfigManager#isWidgetTruncationEllipsisEnabled()})
+     * that already controls it for a widget's Placeholder-derived content.
+     * A Text item typed in over the limit is therefore visibly marked as
+     * cut off exactly like one that only became too long once a
+     * Placeholder resolved, instead of being silently shortened with no
+     * indication anything was lost.
      */
-    private static String sanitizeWidgetText(String text, Chunk widget) {
+    private String sanitizeWidgetText(String text, Chunk widget) {
         // Widgets/Characters are plain tag text now rather than unprintable
         // codepoints, so they're typeable — stripped here so a player can't
         // hand-craft or break one from inside a widget's own Text option.
@@ -245,7 +238,10 @@ public final class NametagEditorManager {
         if(widget.widgetCharacterLimit>=0){
             var asComponent=afx.customplayernametags.format.NametagFormatter.toComponent(afx.customplayernametags.format.NametagFormatter.toMiniMessageSource(out));
             if(afx.customplayernametags.format.NametagFormatter.plainText(asComponent).length()>widget.widgetCharacterLimit){
-                out=afx.customplayernametags.format.NametagFormatter.serialize(afx.customplayernametags.format.NametagFormatter.truncateVisibleCharacters(asComponent,widget.widgetCharacterLimit));
+                var truncated=config.isWidgetTruncationEllipsisEnabled()
+                        ?afx.customplayernametags.format.NametagFormatter.truncateLineWithEllipsis(asComponent,widget.widgetCharacterLimit)
+                        :afx.customplayernametags.format.NametagFormatter.truncateVisibleCharacters(asComponent,widget.widgetCharacterLimit);
+                out=afx.customplayernametags.format.NametagFormatter.serialize(truncated);
             }
         }
         return out;
@@ -307,12 +303,9 @@ public final class NametagEditorManager {
         if(h.view==View.GROUPS){
             boolean bedrock=h.selected==1;
             int back=guiConfig.slot("groups-menu","back",26);
-            int toggle=guiConfig.slot("groups-menu",bedrock?"platform-toggle-bedrock":"platform-toggle-java",25);
             if(slot==back){openAdminGui(p);return;}
-            if(config.isSeparateBedrockGroupFormatsEnabled()&&slot==toggle){openGroups(p,!bedrock);return;}
-            int limit=config.isSeparateBedrockGroupFormatsEnabled()?toggle:back;
             List<String> all=manager.getGroupFormatStore().getGroupNames(bedrock);
-            if(slot<limit&&slot<all.size())begin(p,manager.getGroupFormatStore().get(all.get(slot),bedrock),Target.GROUP,all.get(slot),bedrock);
+            if(slot<back&&slot<all.size())begin(p,manager.getGroupFormatStore().get(all.get(slot),bedrock),Target.GROUP,all.get(slot),bedrock);
             return;
         }
         if(h.view==View.MAIN) {
@@ -467,7 +460,6 @@ public final class NametagEditorManager {
             Chunk widget=s.chunks.get(s.widgetIndex); int i=h.selected;
             if(slot==guiConfig.slot("widget-item-detail-menu","move-left",11)&&i>0){Collections.swap(widget.widgetContents,i,i-1);resyncWidget(widget);openWidgetItemDetail(p,i-1);return;}
             if(slot==guiConfig.slot("widget-item-detail-menu","move-right",15)&&i<widget.widgetContents.size()-1){Collections.swap(widget.widgetContents,i,i+1);resyncWidget(widget);openWidgetItemDetail(p,i+1);return;}
-            if(slot==guiConfig.slot("widget-item-detail-menu","edit",17)&&i>=0&&i<widget.widgetContents.size()&&widget.widgetContents.get(i).kind==Kind.TEXT){openWidgetTextEditSign(p,s,i);return;}
             if(slot==guiConfig.slot("widget-item-detail-menu","delete",13)){
                 if(i>=0&&i<widget.widgetContents.size()){widget.widgetContents.remove(i);resyncWidget(widget);}
                 openWidgetContents(p,s.widgetIndex); return;
@@ -817,11 +809,6 @@ public final class NametagEditorManager {
         put(inv,guiConfig.button("widget-item-detail-menu","move-left",11,Material.ARROW,"&eMove left"));
         put(inv,guiConfig.button("widget-item-detail-menu","delete",13,Material.BARRIER,"&cDelete"));
         put(inv,guiConfig.button("widget-item-detail-menu","move-right",15,Material.ARROW,"&eMove right"));
-        // Only a TEXT item's contents can meaningfully be "edited" in place — Color/Placeholder items
-        // are picked from a fixed list, so changing one is just deleting it and adding another.
-        if(widget.widgetContents.get(subIndex).kind==Kind.TEXT){
-            put(inv,guiConfig.button("widget-item-detail-menu","edit",17,Material.WRITABLE_BOOK,"&eEdit","&7Change this item's text"));
-        }
         put(inv,guiConfig.button("widget-item-detail-menu","back",22,Material.OAK_DOOR,"&aBack"));
         p.openInventory(inv);
     }
@@ -837,7 +824,7 @@ public final class NametagEditorManager {
         p.openInventory(inv);
     }
     private GuiConfigManager.Button widgetAddItemButton(boolean enabled, String key, int slot, Material material,
-                                                         String name, String lore, String disabledName, String disabledLore) {
+                                                        String name, String lore, String disabledName, String disabledLore) {
         return enabled ? guiConfig.button("widget-add-item-menu",key,slot,material,name,lore)
                 : guiConfig.button("widget-add-item-menu",key+"-disabled",slot,Material.BARRIER,disabledName,disabledLore);
     }
@@ -920,10 +907,8 @@ public final class NametagEditorManager {
         Player target = Bukkit.getPlayer(UUID.fromString(targetId));
         if (target == null || target.getUniqueId().equals(editor.getUniqueId())) return;
         boolean notify = config.getNotifyMode() != ConfigManager.NotifyMode.SILENT;
-        if (target.isPermissionSet("customplayernametags.notify.override.silent")
-                && target.hasPermission("customplayernametags.notify.override.silent")) notify = false;
-        else if (target.isPermissionSet("customplayernametags.notify.override.notify")
-                && target.hasPermission("customplayernametags.notify.override.notify")) notify = true;
+        Boolean override = NametagFormatPermissions.notifyOverride(target);
+        if (override != null) notify = override;
         if (notify) target.sendMessage(manager.buildFormatChangedNotify(config, editor, target, newRawFormat));
     }
     public void openAdminGui(Player p){
@@ -961,22 +946,24 @@ public final class NametagEditorManager {
         put(i,guiConfig.button("players-menu","back",53,Material.OAK_DOOR,"&eBack"));
         p.openInventory(i);
     }
-    /** @param bedrock whether to list/edit the Bedrock variant of each group's format instead of the normal (Java) one — only switchable via the on-screen toggle when {@code enable-separate-bedrock-group-formats} is on. */
+    /**
+     * @param bedrock whether to list/edit the Bedrock variant of each
+     *                group's format instead of the normal (Java) one —
+     *                chosen up front by {@link #openGroupsPlatformChoice}
+     *                when {@code enable-separate-bedrock-group-formats} is
+     *                on, and fixed for the lifetime of this screen (no
+     *                in-menu toggle to switch platform once open — going
+     *                back and re-entering "Groups" re-asks instead).
+     */
     private void openGroups(Player p, boolean bedrock){
-        Inventory i=Bukkit.createInventory(new Holder(p.getUniqueId(),View.GROUPS,bedrock?1:0),27,guiConfig.title("groups-menu",ChatColor.DARK_BLUE+"Select Group"+(bedrock?" (Bedrock)":"")));
-        boolean toggleEnabled=config.isSeparateBedrockGroupFormatsEnabled();
+        boolean separateBedrock=config.isSeparateBedrockGroupFormatsEnabled();
+        String defaultTitle=separateBedrock?(bedrock?"Select Bedrock Group":"Select Java Group"):"Select Group";
+        Inventory i=Bukkit.createInventory(new Holder(p.getUniqueId(),View.GROUPS,bedrock?1:0),27,guiConfig.title("groups-menu",ChatColor.DARK_BLUE+defaultTitle));
         int back=guiConfig.slot("groups-menu","back",26);
-        int toggle=guiConfig.slot("groups-menu",bedrock?"platform-toggle-bedrock":"platform-toggle-java",25);
-        int limit=toggleEnabled?toggle:back;
         int slot=0;
         for(String g:manager.getGroupFormatStore().getGroupNames(bedrock)){
-            if(slot>=limit)break;
+            if(slot>=back)break;
             i.setItem(slot++,item(Material.WRITABLE_BOOK,ChatColor.LIGHT_PURPLE+g));
-        }
-        if(toggleEnabled){
-            put(i, bedrock
-                    ?guiConfig.button("groups-menu","platform-toggle-bedrock",25,Material.NETHERITE_BOOTS,"&bViewing: Bedrock","&7Click to view Java groups instead")
-                    :guiConfig.button("groups-menu","platform-toggle-java",25,Material.GRASS_BLOCK,"&aViewing: Java","&7Click to view Bedrock groups instead"));
         }
         put(i,guiConfig.button("groups-menu","back",26,Material.OAK_DOOR,"&eBack"));
         p.openInventory(i);

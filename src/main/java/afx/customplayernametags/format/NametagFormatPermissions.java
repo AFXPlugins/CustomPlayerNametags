@@ -7,7 +7,11 @@ import org.bukkit.permissions.PermissionAttachmentInfo;
 import java.util.List;
 
 /**
- * Shared character-limit logic for anything that lets a player set their own
+ * Shared permission logic for nametag formats. Also hosts
+ * {@link #notifyOverride}, the {@code customplayernametags.notify.override.*}
+ * lookup used by every code path that tells a player their format changed.
+ *
+ * <p>Character-limit logic for anything that lets a player set their own
  * individual {@code nametag-format} override — the legacy {@code /nametags
  * set} subcommand, the separate {@code /nametag set} command, and the
  * chat-based {@code /nametag editor} (see
@@ -27,7 +31,62 @@ public final class NametagFormatPermissions {
      */
     private static final String CHARACTER_LIMIT_PERMISSION_PREFIX = "customplayernametags.bypasslinecharacterlimit.";
 
+    /** The unlimited-characters bypass node. Must be granted explicitly — see {@link #hasExplicitPermission}. */
+    private static final String BYPASS_PERMISSION = "customplayernametags.bypasslinecharacterlimit";
+
+    /** Forces a player to always be told when someone else changes their format. See {@link #notifyOverride}. */
+    private static final String NOTIFY_OVERRIDE_NOTIFY = "customplayernametags.notify.override.notify";
+
+    /** Forces a player to never be told when someone else changes their format. See {@link #notifyOverride}. */
+    private static final String NOTIFY_OVERRIDE_SILENT = "customplayernametags.notify.override.silent";
+
     private NametagFormatPermissions() {
+    }
+
+    /**
+     * Whether {@code player} has {@code node} itself granted (true) among their
+     * effective permissions (own + inherited, e.g. from LuckPerms groups) —
+     * as opposed to {@link Player#hasPermission}, which also returns true when
+     * a wildcard such as {@code *} or {@code customplayernametags.*} covers
+     * the node. Admin groups commonly carry such a wildcard, which used to
+     * silently exempt every admin from the line limit; matching the exact
+     * node here means an admin only bypasses the limit when someone
+     * deliberately granted them {@value #BYPASS_PERMISSION}. An explicit
+     * {@code false} on the node is ignored, same as
+     * {@link #highestTieredPermission}.
+     */
+    private static boolean hasExplicitPermission(Player player, String node) {
+        for (PermissionAttachmentInfo info : player.getEffectivePermissions()) {
+            if (info.getValue() && info.getPermission().equalsIgnoreCase(node)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Per-player override of {@code nametag-format-notify-mode}, from the
+     * {@code customplayernametags.notify.override.silent} and
+     * {@code customplayernametags.notify.override.notify} nodes: {@code FALSE}
+     * = never tell this player, {@code TRUE} = always tell them, {@code null}
+     * = no override (follow the config / the command's announce|silent
+     * argument). {@code silent} wins if a player somehow has both.
+     *
+     * <p>Only an explicitly granted node counts, via
+     * {@link #hasExplicitPermission}. The previous {@code isPermissionSet &&
+     * hasPermission} check was satisfied by a wildcard ({@code *},
+     * {@code customplayernametags.*}), which handed a wildcard holder
+     * <em>both</em> nodes at once — and since {@code silent} wins, admins were
+     * silently never notified, whatever mode was configured.
+     */
+    public static Boolean notifyOverride(Player player) {
+        if (hasExplicitPermission(player, NOTIFY_OVERRIDE_SILENT)) {
+            return Boolean.FALSE;
+        }
+        if (hasExplicitPermission(player, NOTIFY_OVERRIDE_NOTIFY)) {
+            return Boolean.TRUE;
+        }
+        return null;
     }
 
     /**
@@ -70,7 +129,10 @@ public final class NametagFormatPermissions {
      * <p>Resolution order:
      * <ol>
      *   <li>{@code customplayernametags.bypasslinecharacterlimit} —
-     *       unlimited, wins over everything else.</li>
+     *       unlimited, wins over everything else. Only counts when the node
+     *       itself is granted; a wildcard ({@code *},
+     *       {@code customplayernametags.*}) does not, so admins truncate like
+     *       everyone else unless explicitly given this node.</li>
      *   <li>The highest granted
      *       {@code customplayernametags.bypasslinecharacterlimit.<N>} node
      *       (e.g. {@code customplayernametags.bypasslinecharacterlimit.40})
@@ -82,7 +144,7 @@ public final class NametagFormatPermissions {
      * </ol>
      */
     public static int effectiveLineCharacterLimit(ConfigManager config, Player player) {
-        if (player.hasPermission("customplayernametags.bypasslinecharacterlimit")) {
+        if (hasExplicitPermission(player, BYPASS_PERMISSION)) {
             return -1;
         }
         int tiered = highestTieredPermission(player, CHARACTER_LIMIT_PERMISSION_PREFIX);

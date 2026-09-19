@@ -56,14 +56,14 @@ enable-separate-bedrock-group-formats: false
 # Default: 24
 nametag-line-max-characters: 24
 
-# Whether "..." is appended to a nametag line that's past its character
+# Whether "..." is appended to a nametag line that's past its character limit.
 # Default: true
 nametag-truncate-indicator: true
 
 # Same as above, but for a Widget's separate character-limit.
 # Default: true
 nametag-widget-truncate-indicator: true
-# ========================================================================
+# =================================================f=======================
 
 
 # ========================================================================
@@ -89,8 +89,7 @@ nametag-format-notify-mode: NOTIFY
 nametag-format-changed-notify: "&7Your nametag format was just changed by {player} to: \n{format}"
 
 # Message sent to a player when someone disables their individual nametag
-# format (/nametags format player disable). Follows nametag-format-notify-mode
-# the same way nametag-format-changed-notify does.
+#  format.
 # Use "{player}" for the name of the player who made the change.
 # Use "{type}" for what they're now using instead: "global" or "group".
 # Use "{format}" for the new nametag format that was set.
@@ -196,10 +195,8 @@ dismount-commands:
 # Default: 5
 dismount-duration-ticks: 5
 
-# If Multiverse-Portals is installed and Multiverse-Core's own passenger-mode
-#  config value is still left at "default", warn admins about it on join with
-#  a clickable chat message that fixes it for them (see the note above about
-#  Multiverse-Core's passenger-mode). Set to false to never show this.
+# If Multiverse-Portals is installed and Multiverse-Core's passenger-mode
+#  config value is set to "default", warn admins about it on join.
 # Default: true
 notify-multiverse-passenger-mode-default: true
 # ==============================================================================
@@ -221,10 +218,7 @@ bedrock-height-adjust: 0.0
 bedrock-sneak-height-adjust: 0.0
 
 # Extra per-line correction for multi-line nametags rendered through bedrock
-#  players. Applied once for every line beyond the tag's first. Lower this
-#  (or make it negative) if a multi-line tag sits too far below where a
-#  single-line tag would; raise it if a multi-line tag's lower lines drift
-#  upward off the player's head instead.
+#  players.
 bedrock-per-line-height-adjust: 0.0
 
 # ==============================================================================

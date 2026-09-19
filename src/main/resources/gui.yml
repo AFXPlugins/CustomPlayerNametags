@@ -5,12 +5,12 @@
 #                                         /___/                                     /___/
 
 
-# =============================================================================================================================
-#                                             CustomPlayerNametags GUI Configuration
-# =============================================================================================================================
+# ======================================================================================================================
+#                                      CustomPlayerNametags GUI Configuration
+# ======================================================================================================================
 
 # =================================================================================
-# Notice: This file is reset every time the server starts and should not be edited.
+# NOTICE: This file is reset every time the server starts and should not be edited.
 # =================================================================================
 
 main-menu:
@@ -25,7 +25,6 @@ main-menu:
     material: OAK_SIGN
     name: "&fView"
     lore: ["&7View current nametag format"]
-  # Shown in place of each other depending on whether this player currently has nametags hidden.
   toggle-hidden:
     slot: 15
     material: RED_DYE
@@ -75,8 +74,6 @@ players-menu:
 
 groups-menu:
   title: "&8Select Group"
-  # Shown only when enable-separate-bedrock-group-formats is true in
-  # config.yml — click toggles between the Java and Bedrock group lists.
   platform-toggle-java:
     slot: 25
     material: GRASS_BLOCK
@@ -84,7 +81,7 @@ groups-menu:
     lore: ["&7Click to view Bedrock groups instead"]
   platform-toggle-bedrock:
     slot: 25
-    material: NETHERITE_BOOTS
+    material: BEDROCK
     name: "&bViewing: Bedrock"
     lore: ["&7Click to view Java groups instead"]
   back:
@@ -93,8 +90,6 @@ groups-menu:
     name: "&eBack"
     lore: []
 
-# Shown before editing the global format only when
-# enable-separate-bedrock-global-format is true in config.yml.
 platform-choice-menu:
   title: "&8Global Format: Platform"
   java:
@@ -104,7 +99,7 @@ platform-choice-menu:
     lore: ["&7Edit the normal (Java Edition) global format"]
   bedrock:
     slot: 15
-    material: NETHERITE_BOOTS
+    material: BEDROCK
     name: "&bBedrock"
     lore: ["&7Edit the separate Bedrock global format"]
   back:
@@ -113,10 +108,6 @@ platform-choice-menu:
     name: "&eBack"
     lore: []
 
-# Shown before opening the group list only when
-# enable-separate-bedrock-group-formats is true in config.yml. Whichever is
-# picked opens groups-menu for that platform (which still has its own
-# in-list toggle to switch further without coming back here).
 groups-platform-choice-menu:
   title: "&8Groups: Platform"
   java:
@@ -126,7 +117,7 @@ groups-platform-choice-menu:
     lore: ["&7Browse Java Edition group formats"]
   bedrock:
     slot: 15
-    material: NETHERITE_BOOTS
+    material: BEDROCK
     name: "&bBedrock"
     lore: ["&7Browse Bedrock group formats"]
   back:
@@ -152,7 +143,6 @@ editor:
     material: HOPPER
     name: "&aAdd Item"
     lore: ["&7Add a new format piece"]
-  # Only shown when the format has more logical lines than fit on screen at once.
   scroll-up:
     slot: 48
     material: SPECTRAL_ARROW
@@ -163,7 +153,6 @@ editor:
     material: SPECTRAL_ARROW
     name: "&eScroll Down"
     lore: []
-  # Only shown when at least one line has more chunks than fit across one row at once.
   move-left:
     slot: 47
     material: ARROW
@@ -175,7 +164,6 @@ editor:
     name: "&eMove Right"
     lore: ["&7Scroll this line right"]
 
-# Opened by the editor's "Add Item" button — the 4 ways to add a new chunk.
 add-item-menu:
   title: "&8Add Format Piece"
   color:
@@ -198,8 +186,6 @@ add-item-menu:
     material: FEATHER
     name: "&aNew Line"
     lore: ["&7Add a new line"]
-  # Only shown to an admin editing a Global/Player/Group template — never to
-  # a player editing their own applied format.
   widget:
     slot: 17
     material: ITEM_FRAME
@@ -322,15 +308,6 @@ placeholders-menu:
     name: "&eBack"
     lore: []
 
-# Opened from Add Item's Widget button when creating a brand-new widget, or
-# from widget-contents-menu's "Edit Permissions" button when re-configuring an
-# existing one — lets the admin choose which item types (and character limit)
-# the player will be allowed to put into the slot. The name of each toggle
-# button is shown stripped of its own color and re-colored green/yellow-vs-gray
-# at render time depending on whether it's currently on or off, so only the
-# material/slot/base text here are actually admin-configurable. The "Add"
-# button's own label switches to "Save Changes" at render time when editing an
-# existing widget's permissions instead of creating a new one.
 widget-toggles-menu:
   title: "&8Widget: Allowed Items"
   colors:
@@ -348,8 +325,6 @@ widget-toggles-menu:
     material: OAK_SIGN
     name: "&fAllow Text"
     lore: ["&7Whether text can be added to this widget"]
-  # Not a toggle — clicking opens the sign editor to type a new limit, or leave it blank
-  # for unlimited. Current value is appended to this lore at render time.
   character-limit:
     slot: 16
     material: PAPER
@@ -366,8 +341,6 @@ widget-toggles-menu:
     name: "&eBack"
     lore: []
 
-# Opened when a player or admin clicks an existing Widget item in the
-# editor grid — shows what's currently inside it.
 widget-contents-menu:
   title: "&8Widget Contents"
   add-item:
@@ -375,9 +348,6 @@ widget-contents-menu:
     material: HOPPER
     name: "&aAdd Item"
     lore: ["&7Add an item to this widget"]
-  # The following 2 are only shown to an admin editing a Global/Player/Group
-  # template — a player can empty a widget by removing its contents one at a
-  # time but can never change its permissions or remove the slot itself.
   edit-permissions:
     slot: 11
     material: COMPARATOR
@@ -394,8 +364,6 @@ widget-contents-menu:
     name: "&eBack"
     lore: []
 
-# Opened when clicking an individual item inside a widget's contents — same
-# shape as detail-menu, scoped to just that widget's slot.
 widget-item-detail-menu:
   title: "&8Edit Widget Item"
   move-left:
@@ -413,8 +381,6 @@ widget-item-detail-menu:
     material: ARROW
     name: "&eMove right"
     lore: []
-  # Only shown when the selected item is a Text chunk — Color/Placeholder items are picked from a
-  # fixed list, so changing one is just deleting it and adding another.
   edit:
     slot: 17
     material: WRITABLE_BOOK
@@ -426,8 +392,6 @@ widget-item-detail-menu:
     name: "&aBack"
     lore: []
 
-# Opened by widget-contents-menu's "Add Item" button — only offers the
-# item types the admin actually allowed for that widget.
 widget-add-item-menu:
   title: "&8Add Widget Item"
   color:
@@ -466,7 +430,6 @@ widget-add-item-menu:
     name: "&eBack"
     lore: []
 
-# Opened when clicking an individual chunk in the editor grid. {kind} in the title is replaced with the chunk's kind (Text/Placeholder/Color/Newline).
 detail-menu:
   title: "&8Edit {kind}"
   move-left:
@@ -474,16 +437,11 @@ detail-menu:
     material: ARROW
     name: "&eMove left"
     lore: ["&7Move earlier in the format"]
-  # Shown for every piece EXCEPT a Widget. A Widget uses this same slot for
-  # "edit" below instead, since a widget is deleted from inside its own
-  # contents page (widget-contents-menu's "Delete Widget") rather than here.
   delete:
     slot: 13
     material: BARRIER
     name: "&cDelete"
     lore: ["&7Remove this piece"]
-  # Only shown when the selected piece is a Widget — opens that widget's
-  # contents page.
   edit:
     slot: 13
     material: ITEM_FRAME

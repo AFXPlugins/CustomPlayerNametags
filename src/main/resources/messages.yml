@@ -54,7 +54,7 @@ update-notice: "&6[CustomPlayerNametags] &eA new version is available:\n&cv{curr
 # Admin join notice — Multiverse-Core's teleport.passenger-mode
 # -----------------------------------------------------------------------------------------------------------------------------
 multiverse-passenger-mode-notice: "&6[CustomPlayerNametags] &4[IMPORTANT!] &eMultiverse-Core's &fpassenger-mode &eis set to &f\"default\"&e. This plugins functionality unintentionally prevents Multiverse-Portals from teleporting players when left in this mode. Set it to &f\"dismount_passengers\"&e to fix this."
-multiverse-passenger-mode-click: "&a[Click here to set passenger-mode to dismount_passengers]"
+multiverse-passenger-mode-click: "&a[Click here to fix this automatically]"
 multiverse-passenger-mode-click-hover: "&7Runs: &f/mv config passenger-mode dismount_passengers"
 # -----------------------------------------------------------------------------------------------------------------------------
 
@@ -90,35 +90,50 @@ format-groups-luckperms-missing: "&eWarning: LuckPerms isn't installed, so this 
 # ----------------------------------------------------------------------------------------------------------------
 usage-top-level:
   - "&cUsages:"
-  - "&f/{label} reload &e- Reload plugin."
-  - "&f/{label} update &e- Check plugin for updates."
-  - "&f/{label} format &e- Manage nametag formats (including LuckPerms group formats)."
+  - "&f/{label} reload &e- Reload the plugin."
+  - "&f/{label} update &e- Check for plugin updates."
+  - "&f/{label} format &e- Manage nametag formats (global, player, and LuckPerms group)."
   - "&f/{label} editor &e- Open the nametag format editor."
-  - "&f/{label} config &e- View/change safely-runtime-changeable config.yml values."
+  - "&f/{label} config &6[&fkey&6] &6[&fvalue&6] &e- View or change runtime-safe config.yml values."
 
 usage-format:
   - "&cUsages:"
-  - "&f/{label} format global set &6[&fjava/bedrock&6] &6<&fformat&6>|reset &6[&fjava/bedrock&6]|view &6[&fjava/bedrock&6] &6[&fplayer&6] &e- Manage the global format. &6[&fjava/bedrock&6] only applies when enable-separate-bedrock-global-format is true."
-  - "&f/{label} format player set &6<&fplayer&6> &6[&fannounce/silent&6] &6<&fformat&6>|disable &6<&fplayer&6>|view &6<&fplayer&6> &e- Manage a player's format. &6[&fannounce/silent&6] only applies when nametag-format-notify-mode is BOTH."
-  - "&f/{label} format groups add &6[&fjava/bedrock&6] &6<&fgroup&6> &6<&fformat&6>|edit &6[&fjava/bedrock&6] &6<&fgroup&6> &6<&fformat&6>|remove &6[&fjava/bedrock&6] &6<&fgroup&6>|view &6[&fjava/bedrock&6] &6<&fgroup&6> &6[&fplayer&6] &e- Manage group formats. &6[&fjava/bedrock&6] only applies when enable-separate-bedrock-group-formats is true."
+  - "&f/{label} format global &e- Manage the global nametag format."
+  - "&f/{label} format player &e- Manage a player's individual nametag format."
+  - "&f/{label} format groups &e- Manage LuckPerms group nametag formats."
+  - "&7Run any of these without arguments for its full usage."
+
+usage-format-global:
+  - "&cUsages:"
+  - "&f/{label} format global set &6[&fjava/bedrock&6] &6<&fformat&6> &e- Set the global format."
+  - "&f/{label} format global reset &6[&fjava/bedrock&6] &e- Reset the global format to the default."
+  - "&f/{label} format global view &6[&fjava/bedrock&6] &6[&fplayer&6] &e- View the global format, parsed for [player] if given."
+  - "&6[&fjava/bedrock&6] &7is required only when &fenable-separate-bedrock-global-format &7is true."
+
+usage-format-player:
+  - "&cUsages:"
+  - "&f/{label} format player set &6[&fannounce/silent&6] &6<&fplayer&6> &6<&fformat&6> &e- Set a player's format."
+  - "&f/{label} format player disable &6<&fplayer&6> &e- Remove a player's individual format."
+  - "&f/{label} format player view &6<&fplayer&6> &e- View a player's format."
+  - "&6[&fannounce/silent&6] &7is accepted only when &fnametag-format-notify-mode &7is BOTH."
 
 usage-format-set:
   - "&cUsages:"
-  - "&f/{label} format set global &6<&fformat&6> &e- Set the global nametag format."
-  - "&f/{label} format set player &6<&fplayer&6> &6<&fformat&6> &e- Set a player's nametag format."
+  - "&f/{label} format set global &6<&fformat&6> &e- Set the global format."
+  - "&f/{label} format set player &6[&fannounce/silent&6] &6<&fplayer&6> &6<&fformat&6> &e- Set a player's format."
+  - "&6[&fannounce/silent&6] &7is accepted only when &fnametag-format-notify-mode &7is BOTH."
 
 usage-format-groups:
   - "&cUsages:"
-  - "&f/{label} format groups add &6[&fjava/bedrock&6] &6<&fgroup&6> &6<&fformat&6> &e- Create a new group's nametag format. Fails if the group already has one."
-  - "&f/{label} format groups edit &6[&fjava/bedrock&6] &6<&fgroup&6> &6<&fformat&6> &e- Update an existing group's nametag format. Fails if the group doesn't have one yet."
-  - "&f/{label} format groups remove &6[&fjava/bedrock&6] &6<&fgroup&6> &e- Remove a group's nametag format."
-  - "&f/{label} format groups view &6[&fjava/bedrock&6] &6<&fgroup&6> &6[&fplayer&6] &e- View a group's format, unparsed and parsed."
+  - "&f/{label} format groups add &6[&fjava/bedrock&6] &6<&fgroup&6> &6<&fformat&6> &e- Create a group format (fails if one already exists)."
+  - "&f/{label} format groups edit &6[&fjava/bedrock&6] &6<&fgroup&6> &6<&fformat&6> &e- Change a group format (fails if none exists yet)."
+  - "&f/{label} format groups remove &6[&fjava/bedrock&6] &6<&fgroup&6> &e- Remove a group format."
+  - "&f/{label} format groups view &6[&fjava/bedrock&6] &6<&fgroup&6> &6[&fplayer&6] &e- View a group format, parsed for [player] if given."
+  - "&6[&fjava/bedrock&6] &7is required only when &fenable-separate-bedrock-group-formats &7is true."
 
 # ----------------------------------------------------------------------------------------------------------------
 
-
-# /nametag (separate command from /nametags) — GUI-only, no subcommand syntax
-# to document here; running it just opens the menu (see NametagEditorManager).
+# /nametag
 # ---------------------------------------------------------------------
 
 nametag-view-header: "&7Current nametag format:"

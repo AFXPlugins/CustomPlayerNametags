@@ -160,9 +160,12 @@ public final class ConfigManager {
         SILENT,
         /**
          * Lets the admin decide per-change: {@code /nametags format player
-         * set <player> <format> [announce|silent]} accepts a trailing
-         * {@code announce}/{@code silent} argument (defaulting to notify if
-         * omitted). These two extra arguments only exist in this mode.
+         * set [announce|silent] <player> <format>} accepts an optional
+         * {@code announce}/{@code silent} word right after {@code set} and
+         * before the player's name (defaulting to notify if omitted). These two
+         * extra arguments only exist in this mode, and only on {@code set} —
+         * {@code disable} and the GUI editor have no such argument and always
+         * notify in this mode.
          */
         BOTH;
 
@@ -204,7 +207,7 @@ public final class ConfigManager {
      * value or shouldn't be changed at runtime at all.
      */
     public record ConfigField(String key, ConfigValueType type, List<String> enumValues,
-                               Supplier<String> getter, Predicate<String> setter) {
+                              Supplier<String> getter, Predicate<String> setter) {
     }
 
     /**

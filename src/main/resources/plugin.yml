@@ -12,15 +12,11 @@ softdepend: [PlaceholderAPI, LuckPerms, Multiverse-Core, Multiverse-Portals]
 commands:
   nametags:
     description: CustomPlayerNametags admin/management commands
-    usage: /nametags format player set|disable | /nametags format global set|reset | /nametags format groups set|remove
+    usage: /<command> <reload|update|format|editor|config>
     aliases: [customplayernametags]
   nametag:
-    description: Manage your own individual nametag format
-    usage: /nametag — opens the nametag menu (View, Toggle, Edit Nametag)
-    # Deliberately NOT an alias of /nametags — this is its own command with
-    # its own registration and its own permission handling (see
-    # customplayernametags.nametag below), separate from the admin/general
-    # "nametags" command entirely.
+    description: Open the nametag menu to view, toggle, or edit your own nametag
+    usage: /<command>
 
 permissions:
   customplayernametags.admin:
@@ -43,22 +39,18 @@ permissions:
     default: true
   customplayernametags.bypasslinecharacterlimit:
     description: >-
-      Bypasses nametag-line-max-characters for the player. This is not granted
-      by default, including to OPs.
+      Bypasses nametag-line-max-characters for the player. Not granted
+      by default, and a wildcard (* or customplayernametags.*) does NOT
+      grant it: it only takes effect when this exact node is granted to
+      the player or one of their groups.
     default: false
-  # customplayernametags.bypasslinecharacterlimit.<N> (e.g.
-  # customplayernametags.bypasslinecharacterlimit.40) is a dynamic tiered node,
-  # not declared here since <N> isn't fixed: grant it via a permissions plugin
-  # to give a specific player/group a per-line character limit of <N>,
-  # overriding nametag-line-max-characters from config.yml. The highest <N> a
-  # player has is used. customplayernametags.bypasslinecharacterlimit still
-  # wins over any bypasslinecharacterlimit.<N> node. Not granted to anyone by
-  # default.
   customplayernametags.notify.override.notify:
     description: >-
       Forces this player to always be told when someone else changes their
       individual nametag format, regardless of nametag-format-notify-mode
       (or the announce/silent argument in BOTH mode). Not granted by default.
+      Must be granted explicitly; a wildcard (* or customplayernametags.*)
+      does not grant it.
     default: false
   customplayernametags.notify.override.silent:
     description: >-
@@ -66,5 +58,6 @@ permissions:
       individual nametag format, regardless of nametag-format-notify-mode
       (or the announce/silent argument in BOTH mode). Takes priority over
       customplayernametags.notify.override.notify if a player somehow has
-      both. Not granted by default.
+      both. Not granted by default. Must be granted explicitly; a wildcard
+      (* or customplayernametags.*) does not grant it.
     default: false
