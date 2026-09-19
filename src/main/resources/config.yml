@@ -196,7 +196,7 @@ dismount-commands:
 dismount-duration-ticks: 5
 
 # If Multiverse-Portals is installed and Multiverse-Core's passenger-mode
-#  config value is set to "default", warn admins about it on join.
+#  config value is set to "default", it warns admins about it on join.
 # Default: true
 notify-multiverse-passenger-mode-default: true
 # ==============================================================================
