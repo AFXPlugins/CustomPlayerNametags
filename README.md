@@ -6,9 +6,8 @@ Create fully custom player nametags with colors, placeholders, multi-line layout
 
 ## Why use CustomPlayerNametags?
 
-According to what I have researched, CustomPlayerNametags offers several features that aren't present in any other 26.2+ nametag plugins:
+According to what I have researched, CustomPlayerNametags offers several features that aren't present in any other modern player nametag editor plugins:
 
-- **Global nametag formats** — default global format for all players that uses PlaceholderAPI placeholders.
 - **Group nametag formats** — customize nametag formats for specific LuckPerms groups.
 - **Username replacement** — completely remove the default username in order to fully customize the entire nametag.
 - **In-game format editor GUI** — a powerful but simple GUI editor for customizing nametag formats.
@@ -17,6 +16,7 @@ According to what I have researched, CustomPlayerNametags offers several feature
 
 ## Additional Features
 
+- **Global nametag formats** — default global format for all players that uses PlaceholderAPI placeholders.
 - **Individual nametag formats** — set custom nametag formats for individual players.
 - **Tab-list formatting** — applies active nametag formats to the tab list.
 - **Visibility settings** — configure render distance, through-wall visibility, and crouching behavior.
@@ -30,7 +30,7 @@ According to what I have researched, CustomPlayerNametags offers several feature
 
 ## Commands
 
-- `/nametags` — admin commands for managing formats and settings.
+- `/nametags` — administrator commands for managing formats and settings.
 - `/nametag` — player menu for viewing current format, editing permitted widgets, and toggling nametag visibility.
 
 > See the [wiki](https://afxplugins.github.io/documentation/customplayernametags/) for in-depth info on commands, permissions, editing formats, and more.
