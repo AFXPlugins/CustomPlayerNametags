@@ -5,9 +5,12 @@ import afx.customplayernametags.config.ConfigManager;
 import afx.customplayernametags.config.EditorPlaceholderStore;
 import afx.customplayernametags.config.MessageManager;
 import afx.customplayernametags.format.NametagFormatPermissions;
+import afx.customplayernametags.manager.EditorRelayClient;
+import afx.customplayernametags.manager.EditorSessionBuilder;
 import afx.customplayernametags.manager.NametagDisplayManager;
 import afx.customplayernametags.manager.NametagManager;
 import afx.customplayernametags.update.UpdateChecker;
+import com.google.gson.JsonObject;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -141,6 +144,9 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             }
             if (args[1].equalsIgnoreCase("placeholders")) {
                 return handleEditorPlaceholdersCommand(sender, label, args);
+            }
+            if (args[1].equalsIgnoreCase("web")) {
+                return handleEditorWebCommand(sender);
             }
             // "editor" was used with an unrecognized subcommand.
             messages.sendList(sender, "usage-editor", "{label}", label);
@@ -466,6 +472,51 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    /**
+     * Handles {@code /nametags editor web} — builds a snapshot of the
+     * current nametag configuration, hands it to the free Cloudflare
+     * Worker relay, and gives {@code sender} a link to the GitHub
+     * Pages-hosted web editor pre-loaded with it (see
+     * {@link afx.customplayernametags.manager.EditorSessionBuilder} and
+     * {@link afx.customplayernametags.manager.EditorRelayClient}).
+     *
+     * <p>Unlike plain {@code /nametags editor} (the in-game GUI, which
+     * needs a player to open an inventory for), this works from the
+     * console too — there's nothing here that needs a physical player.
+     * The snapshot itself is built synchronously on the calling thread
+     * (it only reads already-loaded in-memory plugin/Bukkit state, no
+     * I/O), but the network request to the relay always runs async, same
+     * as {@link afx.customplayernametags.update.UpdateChecker}.
+     */
+    private boolean handleEditorWebCommand(CommandSender sender) {
+        EditorRelayClient relay = plugin.getEditorRelayClient();
+        if (relay == null) {
+            messages.send(sender, "editor-web-unavailable");
+            return true;
+        }
+
+        JsonObject snapshot;
+        try {
+            snapshot = EditorSessionBuilder.build(
+                    plugin, config, nametagManager, plugin.getPlayerFormatStore(),
+                    nametagManager.getGroupFormatStore(), plugin.getEditorPlaceholderStore());
+        } catch (RuntimeException e) {
+            plugin.getLogger().warning("Failed to build a web editor snapshot: " + e.getMessage());
+            messages.send(sender, "editor-web-failed", "{reason}", "could not build the configuration snapshot");
+            return true;
+        }
+
+        messages.send(sender, "editor-web-preparing");
+        relay.createSession(snapshot, result -> {
+            if (!result.isSuccess()) {
+                messages.send(sender, "editor-web-failed", "{reason}", result.getFailureReason());
+                return;
+            }
+            messages.sendList(sender, "editor-web-ready", "{url}", result.getEditorUrl());
+        });
+        return true;
+    }
+
     /** Sends a warning that group formats won't apply to anyone yet, if LuckPerms isn't installed. */
     private void warnIfLuckPermsMissing(CommandSender sender) {
         if (!nametagManager.isLuckPermsAvailable()) {
@@ -771,6 +822,7 @@ public final class NametagCommand implements CommandExecutor, TabCompleter {
             }
         } else if (args.length == 2 && args[0].equalsIgnoreCase("editor") && isAdmin) {
             completions.add("placeholders");
+            completions.add("web");
         } else if (args.length == 3 && args[0].equalsIgnoreCase("editor")
                 && args[1].equalsIgnoreCase("placeholders") && isAdmin) {
             completions.add("add");

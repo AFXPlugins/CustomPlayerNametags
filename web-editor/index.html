@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nametag editor</title>
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230f1528'/%3E%3Crect x='6' y='12' width='9' height='4' fill='%23ff7f7f'/%3E%3Crect x='17' y='12' width='9' height='4' fill='%23e9edf8'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;650;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="boot" id="boot">
+  <div class="boot-inner">
+    <div class="boot-tag">Loading<i></i></div>
+    <span>Setting up the nametag editor…</span>
+  </div>
+</div>
+
+<div class="app" id="app" data-rail="0">
+  <header class="topbar" id="topbar"></header>
+  <div class="mockbar" id="mockbar" hidden></div>
+  <div class="relaybar" id="relaybar" hidden></div>
+
+  <div class="shell">
+    <nav class="rail" id="rail" aria-label="Formats"></nav>
+    <div class="rail-scrim" id="rail-scrim" data-act="rail-toggle" hidden></div>
+
+    <main class="work" id="work" aria-live="polite"></main>
+
+    <aside class="inspector" id="inspector" aria-label="Inspector"></aside>
+  </div>
+</div>
+
+<div class="layer" id="layer-pop"></div>
+<div class="layer" id="layer-ctx"></div>
+<div class="layer" id="layer-modal"></div>
+<div class="layer" id="layer-drawer"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="src/00-model.js"></script>
+<script src="src/05-doc.js"></script>
+<script src="src/06-icons.js"></script>
+<script src="src/10-render.js"></script>
+<script src="src/16-figure.js"></script>
+<script src="src/20-bridge.js"></script>
+<script src="src/21-relay.js"></script>
+<script src="src/30-app.js"></script>
+<script src="src/60-view.js"></script>
+<script src="src/62-inspector.js"></script>
+<script src="src/65-publish.js"></script>
+<script src="src/70-events.js"></script>
+<script src="src/80-sandbox.js"></script>
+<script>
+  NT.app.init();
+</script>
+</body>
+</html>

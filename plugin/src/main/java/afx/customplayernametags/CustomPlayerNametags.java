@@ -15,6 +15,7 @@ import afx.customplayernametags.config.PlayerWidgetFillStore;
 import afx.customplayernametags.format.TemplateMarkers;
 import afx.customplayernametags.listener.NametagEditorListener;
 import afx.customplayernametags.listener.PlayerConnectionListener;
+import afx.customplayernametags.manager.EditorRelayClient;
 import afx.customplayernametags.manager.MultiverseIntegration;
 import afx.customplayernametags.manager.NametagDisplayManager;
 import afx.customplayernametags.manager.NametagEditorManager;
@@ -67,6 +68,7 @@ public final class CustomPlayerNametags extends JavaPlugin {
     private NametagManager nametagManager;
     private NametagDisplayManager displayManager;
     private NametagEditorManager nametagEditorManager;
+    private EditorRelayClient editorRelayClient;
     private UpdateChecker updateChecker;
     private Metrics metrics;
     private InstallHistory installHistory;
@@ -136,6 +138,8 @@ public final class CustomPlayerNametags extends JavaPlugin {
         this.nametagEditorManager = new NametagEditorManager(this, configManager, nametagManager, messageManager,
                 editorPlaceholderStore, guiConfigManager);
         getServer().getPluginManager().registerEvents(new NametagEditorListener(nametagEditorManager), this);
+
+        this.editorRelayClient = new EditorRelayClient(this);
 
         var nametagCmd = getCommand("nametags");
         if (nametagCmd != null) {
@@ -368,6 +372,10 @@ public final class CustomPlayerNametags extends JavaPlugin {
 
     public NametagEditorManager getNametagEditorManager() {
         return nametagEditorManager;
+    }
+
+    public EditorRelayClient getEditorRelayClient() {
+        return editorRelayClient;
     }
 
     public NametagManager getNametagManager() {

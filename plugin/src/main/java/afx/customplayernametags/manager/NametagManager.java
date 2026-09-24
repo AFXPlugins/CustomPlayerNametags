@@ -244,6 +244,19 @@ public final class NametagManager {
         return LuckPermsIntegration.getAllGroupNames();
     }
 
+    /**
+     * {@code target}'s highest-weight LuckPerms group (matching the same
+     * priority {@link #resolveGroupFormat} uses to pick which group format
+     * applies), or {@code "default"} if LuckPerms isn't installed or the
+     * player has no cached group data yet. Purely a display/label value —
+     * e.g. for the web editor snapshot ({@code EditorSessionBuilder}) — not
+     * used anywhere format resolution itself depends on.
+     */
+    public String getPrimaryGroupName(Player target) {
+        List<String> groups = LuckPermsIntegration.getGroupsByWeightDesc(target);
+        return groups.isEmpty() ? "default" : groups.get(0);
+    }
+
     // ------------------------------------------------------------------
     // Lifecycle
     // ------------------------------------------------------------------

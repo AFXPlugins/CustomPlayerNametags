@@ -96,6 +96,15 @@ editor-placeholders-edit-reset: "&aReset the item title of placeholder &f{placeh
 editor-placeholders-edit-not-found: "&cPlaceholder &f{placeholder}&c isn't in the editor — use &fadd&c to add it."
 editor-placeholders-remove-success: "&aRemoved placeholder &f{placeholder}&a from the editor."
 editor-placeholders-remove-not-found: "&cPlaceholder &f{placeholder}&c isn't in the editor."
+
+# /nametags editor web
+editor-web-preparing: "&7Preparing a web editor session…"
+editor-web-ready:
+  - "&aYour web editor is ready: &f&n{url}"
+  - "&7It edits a snapshot taken just now — nothing changes on the server until you copy the commands it generates (Publish) and run them here."
+  - "&7The link expires after 30 minutes."
+editor-web-failed: "&cCouldn't prepare the web editor: &f{reason}"
+editor-web-unavailable: "&cThe web editor relay isn't available right now."
 # -----------------------------------------------------------------------------------------
 
 
@@ -107,6 +116,7 @@ usage-top-level:
   - "&f/{label} update &e- Check for plugin updates."
   - "&f/{label} format &e- Manage nametag formats (global, player, and LuckPerms group)."
   - "&f/{label} editor &e- Open the nametag format editor."
+  - "&f/{label} editor web &e- Get a link to the browser-based web editor."
   - "&f/{label} editor placeholders &e- Manage the placeholders shown in the editor."
   - "&f/{label} config &6[&fkey&6] &6[&fvalue&6] &e- View or change runtime-safe config.yml values."
 
@@ -142,6 +152,7 @@ usage-format-groups:
 usage-editor:
   - "&cUsages:"
   - "&f/{label} editor &e- Open the nametag format editor."
+  - "&f/{label} editor web &e- Get a link to the browser-based web editor."
   - "&f/{label} editor placeholders &e- Manage the placeholders shown in the editor."
 
 usage-editor-placeholders:
